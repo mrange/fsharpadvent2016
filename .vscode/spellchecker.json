@@ -1,0 +1,17 @@
+{
+    "language": "en_US",
+    "ignoreWordsList": [
+        "blog",
+        "trie",
+        "learnt",
+        "clojure"
+    ],
+    "documentTypes": [
+        "markdown",
+        "latex",
+        "plaintext"
+    ],
+    "ignoreRegExp": [],
+    "ignoreFileExtensions": [],
+    "checkInterval": 5000
+}
