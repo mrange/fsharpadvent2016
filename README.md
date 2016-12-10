@@ -4,7 +4,13 @@
 
 *[Full source code can be found here](https://github.com/mrange/fsharpadvent2016)*
 
-**Update** - The performance numbers in this blog is based on .NET 4.6.1 and FSharp.Core 4.3.0. I intended to run tests against 4.4.0 but adding FsCheck to a project tend to downgrade from 4.3.0. I reran the numbers on 4.4.0 which improved the performance of F# Map by an order of magnitude! A custom comparer still benefit F# Map significantly. @AnthonyLloyd suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs). I am also planning to compare against a `System.Collections.Generic.Dictionary` (mutable). Hopefully, I get the new numbers up this weekend.
+## Changelog
+
+1. **2016-12-10** -
+  1. **New performance test** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
+  2. **New performance test** - Added comparison to an immutable map based on `System.Collections.Generic.Dictionary`
+  3. **FSharp.Core 4.4.0** - Switched to FSharp.Core 4.4.0. This improved the performance of F# Map by an order of magnitude. F# Map still benefits from a custom comparer.
+  4. **Bug fixes** - Fixed an issue in "my" maps that caused the **Remove** performance results to be better than expected.
 
 ## Background
 
@@ -303,6 +309,7 @@ override x.DoTryFind (h, s, k, rv)=
 
 I selected the following data structures to compare:
 
+0. **Mutable Dictionary** - Implemented a naive immutability map based on `System.Collections.Generic.Dictionary<_, _>`.
 1. **Persistent Hash Map (C#)** - "My" Map written in C#
 2. **Persistent Hash Map (F#)** - "My" Map written in F#
 3. **Red Black Tree** - A simplistic implementation of a Red Black Tree (similar to Map)
@@ -330,19 +337,19 @@ I merely estimated the Red Black Tree removal time as I never implemented remove
 
 *Note the scale on the y-axis is logarithmic to make the times comparable.*
 
-We see that F# Map performance is quite slow compared to alternatives (almost 2 orders of magnitude slower in some cases) but with a custom comparer it does a lot better. It turns out that F# generic comparer [does a lot](#user-content-equality-vs-iequatable_).
+As expected the map based on `System.Collections.Generic.Dictionary<_, _>` has the best **Lookup** performance but also has the worst performance for **Insert** and **Remove**. This is because in order to support immutability a full copy is taken whenever a key is added or removed. If your code can accept destructive updates `System.Collections.Generic.Dictionary<_, _>` performs a lot better.
 
-The C# and F# implementations of the persistent hash map has similar performance, as expected, but during development the performance characteristics were often quite different between the two. The difference in performance between the two competing implementations was important for the process as it made me look for better code patterns.
+We see that F# Map **Lookup** performance is quite poor but with a custom comparer it does a lot better. It turns out that F# generic comparer [does a lot](#user-content-equality-vs-iequatable_).
 
-It is satisfying to me that the F# persistent hash map compares favorably to the clojure persistent hash map as one of the reasons I started to look at persistent hash maps was that I was wondering why clojure was performing significantly better than most .NET implementations. It is difficult to draw any substantial conclusions from this but I learnt a lot during the process.
+### Collection Count (Logarithmic Scale)
 
-### Collection Count
+[![Collection Count (Logarithmic Scale)][2]][2]
 
-[![Collection Count][2]][2]
+*Note the scale on the y-axis is logarithmic to make the collection count comparable.*
 
 The number of Garbage Collection that was run during executing gives an estimate of the memory overhead of the various data structures. Lower is better.
 
-There seems to be some correlation between the difference in performance between insert and remove and the collection counts. From this I estimate that GC takes around 50% cpu time.
+`System.Collections.Generic.Dictionary<_, _>` does poorly because in order to support immutability a full copy is taken whenever a key is added or removed. If your code can accept destructive updates `System.Collections.Generic.Dictionary<_, _>` performs a lot better.
 
 ## Wrapping up
 
@@ -916,5 +923,5 @@ Note that we update a value type field or an value type array element there will
 
 So for the future it can be good to keep in mind that while updating reference fields this will also insert an "invisible" call to `JIT_WriteBarrier` which may or may not have significant performance impact.
 
-  [1]: http://i.imgur.com/8WZgTi0.png
-  [2]: http://i.imgur.com/BGN2O27.png
+  [1]: http://i.imgur.com/a26LllF.png
+  [2]: http://i.imgur.com/sHDqESM.png
