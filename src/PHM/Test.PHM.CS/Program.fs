@@ -426,8 +426,8 @@ module PerformanceTests =
 
   type Checker () =
     [<Conditional ("DEBUG")>]
-    static member check b str =
-      if not b then
+    static member inline check fb str =
+      if not (fb ()) then
         printfn "Check failed: %s" str
         failwith str
 
@@ -468,6 +468,15 @@ module PerformanceTests =
       let v = float (e - b)*r + float b |> int
       v
 
+  let shuffle random vs =
+    let a = Array.copy vs
+    for i in 0..(vs.Length - 2) do
+      let s =  random i vs.Length
+      let t =  a.[s]
+      a.[s] <- a.[i]
+      a.[i] <- t
+    a
+
 // Key is reference type in order to not kill performance in collections that always boxes
 //  the key/value
   type Key(v : int) =
@@ -505,14 +514,8 @@ module PerformanceTests =
     [|
       for i in 0..(inner - 1) -> random 0 (inner*multiplier) |> makeKey, string i
     |]
-  let removals  =
-    let a = Array.copy inserts
-    for i in 0..(inner - 2) do
-      let s =  random i inner
-      let t =  a.[s]
-      a.[s] <- a.[i]
-      a.[i] <- t
-    a
+  let removals    = shuffle random inserts
+  let lookups     = shuffle random inserts
 
   module PersistentHashMap =
     let length (phm : PersistentHashMap<_, _>) =
@@ -526,7 +529,7 @@ module PerformanceTests =
       |> Array.fold (fun (s : PersistentHashMap<_, _>) (k, v) -> s.Set (k, v)) phm
 
     let inline doRemove phm =
-      inserts
+      removals
       |> Array.fold (fun (s : PersistentHashMap<_, _>) (k, _) -> s.Unset k) phm
 
     let inline doLookup fa (phm : PersistentHashMap<_, _>) =
@@ -538,25 +541,25 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      Checker.check (length result = length inserted) "Expected to be same length as testSet"
+      Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check result.IsEmpty "Expected to be empty"
+      Checker.check (fun () -> result.IsEmpty) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check result.IsEmpty "Expected to be empty"
+      Checker.check (fun () -> result.IsEmpty) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module FsPersistentHashMap =
     open Persistent
@@ -565,8 +568,8 @@ module PerformanceTests =
       inserts
       |> Array.fold (fun s (k, v) -> PersistentHashMap.set k v s) phm
 
-    let inline doRemove phm =
-      inserts
+    let doRemove phm =
+      removals
       |> Array.fold (fun s (k, v) -> PersistentHashMap.unset k s) phm
 
     let inline doLookup fa phm =
@@ -577,25 +580,25 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert PersistentHashMap.empty
-      Checker.check (PersistentHashMap.length result = PersistentHashMap.length inserted) "Expected to be same length as testSet"
+      Checker.check (fun () -> PersistentHashMap.length result = PersistentHashMap.length inserted) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (PersistentHashMap.isEmpty result) "Expected to be empty"
+      Checker.check (fun () -> PersistentHashMap.isEmpty result) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert PersistentHashMap.empty
       let result    = doRemove inserted
-      Checker.check (PersistentHashMap.isEmpty result) "Expected to be empty"
+      Checker.check (fun () -> PersistentHashMap.isEmpty result) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert PersistentHashMap.empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module RedBlackTree =
     let inline doInsert hm =
@@ -611,16 +614,16 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      Checker.check (RedBlackTree.count result = RedBlackTree.count inserted) "Expected to be same length as testSet"
+      Checker.check (fun () -> RedBlackTree.count result = RedBlackTree.count inserted) "Expected to be same length as testSet"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module PrimeVmap =
     open Prime
@@ -630,7 +633,7 @@ module PerformanceTests =
       |> Array.fold (fun s (k, v) -> Vmap.add k v s) phm
 
     let inline doRemove phm =
-      inserts
+      removals
       |> Array.fold (fun s (k, v) -> Vmap.remove k s) phm
 
     let inline doLookup fa phm =
@@ -641,28 +644,29 @@ module PerformanceTests =
 
     let inserted  = doInsert empty
 
+    let length vm = vm |> Vmap.toSeq |> Seq.length
+
     let insert () =
       let result    = doInsert empty
-      ()
-//      Checker.check (Vmap.length result = Vmap.length inserted) "Expected to be same length as testSet"
+      Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (Vmap.isEmpty result) "Expected to be empty"
+      Checker.check (fun () -> Vmap.isEmpty result) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check (Vmap.isEmpty result) "Expected to be empty"
+      Checker.check (fun () -> Vmap.isEmpty result) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module Map =
     open System.Collections.Generic
@@ -672,7 +676,7 @@ module PerformanceTests =
       |> Array.fold (fun s (k, v) -> s |> Map.add k v) hm
 
     let inline doRemove hm =
-      inserts
+      removals
       |> Array.fold (fun s (k, _) -> s |> Map.remove k) hm
 
     let inline doLookup fa hm =
@@ -685,25 +689,25 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
+      Checker.check (fun () -> result.Count = inserted.Count) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (result.Count = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check (result.Count = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module Map2 =
 
@@ -716,15 +720,15 @@ module PerformanceTests =
       |> Array.fold (fun s (k, v) -> s |> Map.add k v) hm
 
     let inline doRemove hm =
-      inserts
+      removals
       |> Array.fold (fun s (k, _) -> s |> Map.remove k) hm
 
     let inline doLookup fa hm =
       fa
       |> Array.forall (fun (k, _) -> hm |> Map.containsKey k)
 
-    let empty     = 
-      let comparer = 
+    let empty     =
+      let comparer =
         { new IComparer<Key> with
           member x.Compare (l, r) = l.Value.CompareTo r.Value
         }
@@ -734,25 +738,25 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
+      Checker.check (fun () -> result.Count = inserted.Count) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (result.Count = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check (result.Count = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module FSharpx =
     open Patches.FSharpx.Collections
@@ -762,7 +766,7 @@ module PerformanceTests =
       |> Array.fold (fun s (k, v) -> s |> PersistentHashMap.add k v) hm
 
     let inline doRemove hm =
-      inserts
+      removals
       |> Array.fold (fun s (k, _) -> s |> PersistentHashMap.remove k) hm
 
     let inline doLookup fa hm =
@@ -774,48 +778,82 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      Checker.check (result.Length = inserted.Length) "Expected to be same length as testSet"
+      Checker.check (fun () -> result.Length = inserted.Length) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (result.Length = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Length = 0) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check (result.Length = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Length = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module Dict =
     open System.Collections.Generic
 
-    let inline doInsert () =
+    let dictAdd k v (d : Dictionary<_, _>) =
+      let copy = Dictionary<_, _> d // Need to copy dictionary to preserve immutability
+      copy.[k] <- v
+      copy
+
+    let dictRemove k (d : Dictionary<_, _>) =
+      let copy = Dictionary<_, _> d // Need to copy dictionary to preserve immutability
+      copy.Remove k |> ignore
+      copy
+
+    let inline dictContainsKey k (d : Dictionary<_, _>) =
+      d.ContainsKey k
+
+    let inline doInsert hm =
+      inserts
+      |> Array.fold (fun s (k, v) -> s |> dictAdd k v) hm
+
+    let inline doRemove hm =
+      removals
+      |> Array.fold (fun s (k, _) -> s |> dictRemove k) hm
+
+    let inline doLookup fa hm =
+      fa
+      |> Array.forall (fun (k, _) -> hm |> dictContainsKey k)
+
+    let empty     = Dictionary<_, _> ()
+    let inserted  =
       let dict = Dictionary<_, _> ()
       for k, v in inserts do
         dict.[k] <- v
       dict
 
-    let inline doLookup fa (dict : Dictionary<_, _>) =
-      fa
-      |> Array.forall (fun (k, _) -> dict.ContainsKey k)
-
-    let inserted  = doInsert ()
-
     let insert () =
-      let result    = doInsert ()
-      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
+      let result    = doInsert empty
+      Checker.check (fun () -> result.Count = inserted.Count) "Expected to be same length as testSet"
+
+    let remove () =
+      let result    = doRemove inserted
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   module SCI =
     open System.Collections.Immutable
@@ -825,7 +863,7 @@ module PerformanceTests =
       |> Array.fold (fun (s : ImmutableDictionary<_, _>) (k, v) -> (s.Remove k).Add (k, v)) hm
 
     let inline doRemove hm =
-      inserts
+      removals
       |> Array.fold (fun (s : ImmutableDictionary<_, _>) (k, _) -> s.Remove k) hm
 
     let inline doLookup fa (hm : ImmutableDictionary<_, _>) =
@@ -837,30 +875,31 @@ module PerformanceTests =
 
     let insert () =
       let result    = doInsert empty
-      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
+      Checker.check (fun () -> result.Count = inserted.Count) "Expected to be same length as testSet"
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (result.Count = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check (result.Count = 0) "Expected to be empty"
+      Checker.check (fun () -> result.Count = 0) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
     let lookupInserted () =
-      let result    = doLookup removals inserted
-      Checker.check result "Expected true for all"
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
 
   let testCases =
     [|
       "Lookup"  , "Mutable Dictionary"           , Dict.lookupInserted
       "Insert"  , "Mutable Dictionary"           , Dict.insert
+      "Remove"  , "Mutable Dictionary"           , Dict.remove
       "Lookup"  , "Persistent Hash Map (C#)"     , PersistentHashMap.lookupInserted
       "Insert"  , "Persistent Hash Map (C#)"     , PersistentHashMap.insert
       "Remove"  , "Persistent Hash Map (C#)"     , PersistentHashMap.remove
