@@ -14,6 +14,8 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------------------
 
+open Common
+
 module FsCheckConfig =
   open FsCheck
 #if DEBUG
@@ -86,8 +88,9 @@ module FsPropertyTests =
     | Add     of int*string
     | Remove  of int
 
+  let checkInvariant (phm : PersistentHashMap<_, _>) = phm.CheckInvariant ()
+
   type Properties () =
-    static let checkInvariant (phm : PersistentHashMap<_, _>) = phm.CheckInvariant ()
 
     static member ``PHM toArray must contain all added values`` (vs : (int*string) []) =
       let expected  = uniqueKey vs
@@ -179,9 +182,48 @@ module FsPropertyTests =
 
   open FsCheck
 
+  let testLongInsert () =
+#if DEBUG
+    let count       = 1000
+#else
+    let count       = 1000000
+#endif
+    let multiplier  = 8
+    printfn "testLongInsert: count:%d, multiplier:%d" count multiplier
+    let random      = makeRandom 19740531
+    let inserts     = [| for x in 1..count -> random 0 (count * multiplier) |]
+    let removals    = shuffle random inserts
+
+    let mutable phm = PersistentHashMap.empty
+
+    for i in inserts do
+      phm <- phm |> PersistentHashMap.set i i
+      match phm |> PersistentHashMap.tryFind i with
+      | Some v when v = i -> ()
+      | _                 -> failwith "testLongInsert/insert/tryFind failed"
+
+#if DEBUG
+      if phm |> checkInvariant |> not then
+        failwith "testLongInsert/insert/checkInvariant failed"
+#endif
+
+    for r in removals do
+      phm <- phm |> PersistentHashMap.unset r
+      match phm |> PersistentHashMap.tryFind r with
+      | None  -> ()
+      | _     -> failwith "testLongInsert/remove/tryFind failed"
+
+#if DEBUG
+      if phm |> checkInvariant |> not then
+        failwith "testLongInsert/remove/checkInvariant failed"
+#endif
+
+    printfn "  Done"
+
   let run () =
     // Properties.``PHM TryFind must return all added values`` [|(IntKey 33, StringKey 0); (StringKey -31, TupleKey (0,""))|] |> printfn "%A"
     Check.All<Properties> FsCheckConfig.config
+    testLongInsert ()
 
 module PropertyTests =
   open FsCheck
@@ -413,9 +455,48 @@ module PropertyTests =
 
       loop Map.empty (empty ()) 0
 
+  let testLongInsert () =
+#if DEBUG
+    let count       = 1000
+#else
+    let count       = 1000000
+#endif
+    let multiplier  = 8
+    printfn "testLongInsert: count:%d, multiplier:%d" count multiplier
+    let random      = makeRandom 19740531
+    let inserts     = [| for x in 1..count -> random 0 (count * multiplier) |]
+    let removals    = shuffle random inserts
+
+    let mutable phm = empty ()
+
+    for i in inserts do
+      phm <- phm.Set (i, i)
+      match phm.TryFind i with
+      | true, v when v = i  -> ()
+      | _                   -> failwith "testLongInsert/insert/tryFind failed"
+
+#if DEBUG
+      if phm |> checkInvariant |> not then
+        failwith "testLongInsert/insert/checkInvariant failed"
+#endif
+
+    for r in removals do
+      phm <- phm.Unset r
+      match phm.TryFind r with
+      | false , _ -> ()
+      | _         -> failwith "testLongInsert/remove/tryFind failed"
+
+#if DEBUG
+      if phm |> checkInvariant |> not then
+        failwith "testLongInsert/remove/checkInvariant failed"
+#endif
+
+    printfn "  Done"
+
   let run () =
 //    Properties.``PHM toArray must contain all added values`` [|(13, null); (-3, ""); (0, "")|] |> printfn "Result: %A"
     Check.All<Properties> FsCheckConfig.config
+    testLongInsert ()
 
 #if !DEBUG
 module PerformanceTests =
@@ -455,27 +536,6 @@ module PerformanceTests =
     let ecc0, ecc1, ecc2  = cc 0, cc 1, cc 2
 
     v, (e - b), ecc0 - bcc0, ecc1 - bcc1, ecc2 - bcc2
-
-  let makeRandom (seed : int) =
-    let mutable state = int64 seed
-    let m = 0x7FFFFFFFL // 2^31 - 1
-    let d = 1. / float m
-    let a = 48271L      // MINSTD
-    let c = 0L
-    fun (b : int) (e : int) ->
-      state <- (a*state + c) % m
-      let r = float state * d
-      let v = float (e - b)*r + float b |> int
-      v
-
-  let shuffle random vs =
-    let a = Array.copy vs
-    for i in 0..(vs.Length - 2) do
-      let s =  random i vs.Length
-      let t =  a.[s]
-      a.[s] <- a.[i]
-      a.[i] <- t
-    a
 
 // Key is reference type in order to not kill performance in collections that always boxes
 //  the key/value
