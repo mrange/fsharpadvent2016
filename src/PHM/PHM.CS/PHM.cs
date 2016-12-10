@@ -752,7 +752,7 @@ namespace PHM.CS
         else
         {
           var bit = Bit (h, s);
-          return new BitmapNodeN<K, V> (TrieMask & ~bit, CopyArrayRemoveHole (localIdx, Nodes));
+          return new BitmapNodeN<K, V> (0xFFFF & ~bit, CopyArrayRemoveHole (localIdx, Nodes));
         }
       }
     }

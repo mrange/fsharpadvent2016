@@ -32,15 +32,17 @@ module Details =
   let TrieMask      = 15u // maxNodes - 1
 
   let inline localHash  h s = (h >>> s) &&& TrieMask
-  let inline bit        h s = 1u <<< int (localHash h s)
+  let inline bit        h s = 1us <<< int (localHash h s)
   let inline popCount   i   =
     // From: http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
     //  x86/x64 support popcnt but that isn't available in ILAsm
-    let mutable v = i
+    //  TODO: This is designed for 32 bit integers but we only need to count in 16 bit integers
+    //    Is there a faster way to count then?
+    let mutable v = uint32 (i : uint16)
     v <- v - ((v >>> 1) &&& 0x55555555u)
     v <- (v &&& 0x33333333u) + ((v >>> 2) &&& 0x33333333u)
     ((v + (v >>> 4) &&& 0xF0F0F0Fu) * 0x1010101u) >>> 24
-  let inline localIdx bit b = popCount (b &&& (bit - 1u)) |> int
+  let inline localIdx bit b = popCount (b &&& (bit - 1us)) |> int
   let inline checkHash hash localHash shift = (hash &&& ((1u <<< shift) - 1u)) = localHash
 
   let inline refEqual<'T when 'T: not struct> (l : 'T) (r : 'T) = Object.ReferenceEquals (l, r)
@@ -162,19 +164,19 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
     else
       upcast x
 
-and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint32, node : PersistentHashMap<'K, 'V>) =
+and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint16, node : PersistentHashMap<'K, 'V>) =
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
   override x.DoCheckInvariant h s =
-    let localIdx = popCount (bitmap - 1u)
+    let localIdx = popCount (bitmap - 1us)
     popCount bitmap |> int = 1
     && node.DoCheckInvariant (h ||| (localIdx <<< s)) (s + TrieShift)
 #endif
   override x.DoVisit    r           = node.DoVisit r
   override x.DoSet      h s kv      =
     let bit = bit h s
-    if (bit &&& bitmap) <> 0u then
+    if (bit &&& bitmap) <> 0us then
       let nn  = node.DoSet h (s + TrieShift) kv
       upcast BitmapNode1 (bitmap, nn)
     elif bitmap < bit then
@@ -184,13 +186,13 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
 
   override x.DoTryFind (h, s, k, rv) =
     let bit = bit h s
-    if (bit &&& bitmap) <> 0u then
+    if (bit &&& bitmap) <> 0us then
       node.DoTryFind (h, (s + TrieShift), k, &rv)
     else
       false
   override x.DoUnset    h s k       =
     let bit = bit h s
-    if (bit &&& bitmap) <> 0u then
+    if (bit &&& bitmap) <> 0us then
       let nn = node.DoUnset h (s + TrieShift) k
       if refEqual nn PersistentHashMap<'K, 'V>.Empty |> not then
         upcast BitmapNode1 (bitmap, nn)
@@ -199,20 +201,20 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
     else
       upcast x
 
-and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint32, nodes : PersistentHashMap<'K, 'V> []) =
+and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint16, nodes : PersistentHashMap<'K, 'V> []) =
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
   let rec doCheckInvariantNodes (hash : uint32) shift b localHash i =
-    if b <> 0u && i < nodes.Length then
+    if b <> 0us && i < nodes.Length then
       let n = nodes.[i]
-      if (b &&& 1u) = 0u then
+      if (b &&& 1us) = 0us then
         doCheckInvariantNodes hash shift (b >>> 1) (localHash + 1u) i
       else
         n.DoCheckInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift)
         && doCheckInvariantNodes hash shift (b >>> 1) (localHash + 1u) (i + 1)
     else
-      b = 0u
+      b = 0us
 #endif
 
   let rec doVisit (r : OptimizedClosures.FSharpFunc<_, _, _>) i =
@@ -233,7 +235,7 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
   override x.DoSet      h s kv      =
     let bit = bit h s
     let localIdx = localIdx bit bitmap
-    if (bit &&& bitmap) <> 0u then
+    if (bit &&& bitmap) <> 0us then
       let nn  = nodes.[localIdx].DoSet h (s + TrieShift) kv
       let nns = copyArray nodes
       nns.[localIdx] <- nn
@@ -246,7 +248,7 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
         upcast BitmapNode16 nns
   override x.DoTryFind (h, s, k, rv)=
     let bit = bit h s
-    if (bit &&& bitmap) <> 0u then
+    if (bit &&& bitmap) <> 0us then
       let localIdx = localIdx bit bitmap
       nodes.[localIdx].DoTryFind (h, (s + TrieShift), k, &rv)
     else
@@ -254,7 +256,7 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
   override x.DoUnset    h s k       =
     let bit = bit h s
     let localIdx = localIdx bit bitmap
-    if (bit &&& bitmap) <> 0u then
+    if (bit &&& bitmap) <> 0us then
       let nn = nodes.[localIdx].DoUnset h (s + TrieShift) k
       if refEqual nn PersistentHashMap<'K, 'V>.Empty |> not then
         let nns = copyArray nodes
@@ -317,7 +319,7 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
       upcast BitmapNode16 (nns)
     else
       let nns = copyArrayRemoveHole localIdx nodes
-      upcast BitmapNodeN (TrieMask &&& ~~~bit, nns)
+      upcast BitmapNodeN (~~~bit, nns)
 
 and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, keyValues : KeyValueNode<'K, 'V> []) =
   inherit PersistentHashMap<'K, 'V>()
