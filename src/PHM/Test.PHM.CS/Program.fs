@@ -622,6 +622,48 @@ module PerformanceTests =
       let result    = doLookup removals inserted
       Checker.check result "Expected true for all"
 
+  module PrimeVmap =
+    open Prime
+
+    let inline doInsert phm =
+      inserts
+      |> Array.fold (fun s (k, v) -> Vmap.add k v s) phm
+
+    let inline doRemove phm =
+      inserts
+      |> Array.fold (fun s (k, v) -> Vmap.remove k s) phm
+
+    let inline doLookup fa phm =
+      fa
+      |> Array.forall (fun (k, _) -> Vmap.containsKey k phm)
+
+    let empty     = Vmap.makeEmpty ()
+
+    let inserted  = doInsert empty
+
+    let insert () =
+      let result    = doInsert empty
+      ()
+//      Checker.check (Vmap.length result = Vmap.length inserted) "Expected to be same length as testSet"
+
+    let remove () =
+      let result    = doRemove inserted
+      Checker.check (Vmap.isEmpty result) "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      Checker.check (Vmap.isEmpty result) "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
   module Map =
     open System.Collections.Generic
 
@@ -752,6 +794,29 @@ module PerformanceTests =
       let result    = doLookup removals inserted
       Checker.check result "Expected true for all"
 
+  module Dict =
+    open System.Collections.Generic
+
+    let inline doInsert () =
+      let dict = Dictionary<_, _> ()
+      for k, v in inserts do
+        dict.[k] <- v
+      dict
+
+    let inline doLookup fa (dict : Dictionary<_, _>) =
+      fa
+      |> Array.forall (fun (k, _) -> dict.ContainsKey k)
+
+    let inserted  = doInsert ()
+
+    let insert () =
+      let result    = doInsert ()
+      Checker.check (result.Count = inserted.Count) "Expected to be same length as testSet"
+
+    let lookupInserted () =
+      let result    = doLookup removals inserted
+      Checker.check result "Expected true for all"
+
   module SCI =
     open System.Collections.Immutable
 
@@ -794,6 +859,8 @@ module PerformanceTests =
 
   let testCases =
     [|
+      "Lookup"  , "Mutable Dictionary"           , Dict.lookupInserted
+      "Insert"  , "Mutable Dictionary"           , Dict.insert
       "Lookup"  , "Persistent Hash Map (C#)"     , PersistentHashMap.lookupInserted
       "Insert"  , "Persistent Hash Map (C#)"     , PersistentHashMap.insert
       "Remove"  , "Persistent Hash Map (C#)"     , PersistentHashMap.remove
@@ -805,6 +872,9 @@ module PerformanceTests =
       "Lookup"  , "FSharpx.Collections"          , FSharpx.lookupInserted
       "Insert"  , "FSharpx.Collections"          , FSharpx.insert
       "Remove"  , "FSharpx.Collections"          , FSharpx.remove
+      "Lookup"  , "Prime.Vmap"                   , PrimeVmap.lookupInserted
+      "Insert"  , "Prime.Vmap"                   , PrimeVmap.insert
+      "Remove"  , "Prime.Vmap"                   , PrimeVmap.remove
       "Lookup"  , "System.Collections.Immutable" , SCI.lookupInserted
       "Insert"  , "System.Collections.Immutable" , SCI.insert
       "Remove"  , "System.Collections.Immutable" , SCI.remove

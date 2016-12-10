@@ -1,6 +1,10 @@
-# F# Advent - December 10, 2016 - Implementing a persistent hash map.
+# F# Advent 2016 (English) - December 10 - Implementing a persistent hash map.
+
+*This blog created for [F# Advent 2016 (English)](https://sergeytihon.wordpress.com/2016/10/23/f-advent-calendar-in-english-2016/)*
 
 *[Full source code can be found here](https://github.com/mrange/fsharpadvent2016)*
+
+**Update** - The performance numbers in this blog is based on .NET 4.6.1 and FSharp.Core 4.3.0. I intended to run tests against 4.4.0 but adding FsCheck to a project tend to downgrade from 4.3.0. I reran the numbers on 4.4.0 which improved the performance of F# Map by an order of magnitude! A custom comparer still benefit F# Map significantly. @AnthonyLloyd suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs). I am also planning to compare against a `System.Collections.Generic.Dictionary` (mutable). Hopefully, I get the new numbers up this weekend.
 
 ## Background
 
