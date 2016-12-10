@@ -6,8 +6,8 @@
 
 ## Changelog
 
-1. **2016-12-10** -
-  1. **New performance test** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
+1. **2016-12-10**
+  1. **New performance test** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs).
   2. **New performance test** - Added comparison to an immutable map based on `System.Collections.Generic.Dictionary`
   3. **FSharp.Core 4.4.0** - Switched to FSharp.Core 4.4.0. This improved the performance of F# Map by an order of magnitude. F# Map still benefits from a custom comparer.
   4. **Bug fixes** - Fixed an issue in "my" maps that caused the **Remove** performance results to be better than expected.
@@ -309,15 +309,16 @@ override x.DoTryFind (h, s, k, rv)=
 
 I selected the following data structures to compare:
 
-0. **Mutable Dictionary** - Implemented a naive immutability map based on `System.Collections.Generic.Dictionary<_, _>`.
-1. **Persistent Hash Map (C#)** - "My" Map written in C#
-2. **Persistent Hash Map (F#)** - "My" Map written in F#
-3. **Red Black Tree** - A simplistic implementation of a Red Black Tree (similar to Map)
-4. **FSharpx.Collections.PersistentHashMap**
-5. **System.Collections.Immutable.ImmutableDictionary**
-6. **FSharp.Collections.Map**
-7. **FSharp.Collections.Map'** - This is a patched version of Map which allows a custom compare function
-8. **clojure.PersistentHashMap** - Running on JVM
+1. **Mutable Dictionary** - Implemented a naive immutability map based on `System.Collections.Generic.Dictionary<_, _>`.
+2. **Persistent Hash Map (C#)** - "My" Map written in C#
+3. **Persistent Hash Map (F#)** - "My" Map written in F#
+4. **Red Black Tree** - A simplistic implementation of a Red Black Tree (similar to Map)
+5. **FSharpx.Collections.PersistentHashMap**
+6. **Prime.Vmap** - Anthony Lloyd suggested in a comment that I should add a comparison to [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
+7. **System.Collections.Immutable.ImmutableDictionary**
+8. **FSharp.Collections.Map**
+9. **FSharp.Collections.Map'** - This is a patched version of Map which allows a custom compare function
+10. **clojure.PersistentHashMap** - Running on JVM
 
 I run three test cases on the selected data structures:
 
