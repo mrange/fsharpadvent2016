@@ -95,6 +95,18 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Core, Version=4.4.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <Reference Include="Imms">
+      <HintPath>..\packages\Imms.0.7.0.0\lib\net45\Imms.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Imms.Abstract">
+      <HintPath>..\packages\Imms.0.7.0.0\lib\net45\Imms.Abstract.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Imms.FSharp">
+      <HintPath>..\packages\Imms.FSharp.0.7.0\lib\net45\Imms.FSharp.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="System" />
     <Reference Include="System.Collections.Immutable">

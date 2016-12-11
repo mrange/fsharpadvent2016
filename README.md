@@ -11,6 +11,8 @@
   2. **New performance test** - Added comparison to an immutable map based on `System.Collections.Generic.Dictionary`
   3. **FSharp.Core 4.4.0** - Switched to FSharp.Core 4.4.0. This improved the performance of F# Map by an order of magnitude. F# Map still benefits from a custom comparer.
   4. **Bug fixes** - Fixed an issue in "my" maps that caused the **Remove** performance results to be better than expected.
+2. **2016-12-11**
+  1. **New performance test** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms).
 
 ## Background
 
@@ -314,23 +316,26 @@ I selected the following data structures to compare:
 3. **Persistent Hash Map (F#)** - "My" Map written in F#
 4. **Red Black Tree** - A simplistic implementation of a Red Black Tree (similar to Map)
 5. **FSharpx.Collections.PersistentHashMap**
-6. **Prime.Vmap** - Anthony Lloyd suggested in a comment that I should add a comparison to [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
-7. **System.Collections.Immutable.ImmutableDictionary**
-8. **FSharp.Collections.Map**
-9. **FSharp.Collections.Map'** - This is a patched version of Map which allows a custom compare function
-10. **clojure.PersistentHashMap** - Running on JVM
+6. **Prime.Vmap** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
+7. **Imms.ImmMap** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms)
+8. **System.Collections.Immutable.ImmutableDictionary**
+9. **FSharp.Collections.Map**
+10. **FSharp.Collections.Map'** - This is a patched version of Map which allows a custom compare function
+11. **clojure.PersistentHashMap** - Running on JVM
 
 I run three test cases on the selected data structures:
 
-1. **Lookup** - Looking up all the values in a map of 100 elements
-2. **Insert** - Creating a new map of 100 elements
-3. **Remove** - Removing all the values in a map of 100 elements
+1. **Lookup** - Looking up all the values in a map created by **Insert**
+2. **Insert** - Creating a new map from 100 elements (data contains some duplicates)
+3. **Remove** - Removing all the values in a map created by **Insert**
 
 I run each test case 40,000 times per data structure and collect the elapsed time as well a GC Collection Counts. All numbers are compared against the F# Persistent Hash Map
 
 To be able to compare the Java code with .NET code I implemented a simple random generator to ensure the test data is identical.
 
 I merely estimated the Red Black Tree removal time as I never implemented remove (too hard for me).
+
+*For the future; the size of the data effects performance characteristics so data size that should be varied.*
 
 ### Execution Time In Ms (Logarithmic Scale)
 
@@ -924,5 +929,5 @@ Note that we update a value type field or an value type array element there will
 
 So for the future it can be good to keep in mind that while updating reference fields this will also insert an "invisible" call to `JIT_WriteBarrier` which may or may not have significant performance impact.
 
-  [1]: http://i.imgur.com/a26LllF.png
-  [2]: http://i.imgur.com/sHDqESM.png
+  [1]: http://i.imgur.com/527IMkO.png
+  [2]: http://i.imgur.com/aFf1PgF.png

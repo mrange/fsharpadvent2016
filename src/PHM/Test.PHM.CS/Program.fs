@@ -728,6 +728,49 @@ module PerformanceTests =
       let result    = doLookup lookups inserted
       Checker.check (fun () -> result) "Expected true for all"
 
+  module ImmsMap =
+    open Imms
+
+    let inline doInsert phm =
+      inserts
+      |> Array.fold (fun s (k, v) -> ImmMap.set k v s) phm
+
+    let inline doRemove phm =
+      removals
+      |> Array.fold (fun s (k, v) -> ImmMap.remove k s) phm
+
+    let inline doLookup fa phm =
+      fa
+      |> Array.forall (fun (k, _) -> ImmMap.containsKey k phm)
+
+    let empty     = ImmMap.empty
+
+    let inserted  = doInsert empty
+
+    let length vm = ImmMap.length vm
+
+    let insert () =
+      let result    = doInsert empty
+      Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+    let remove () =
+      let result    = doRemove inserted
+      Checker.check (fun () -> ImmMap.isEmpty result) "Expected to be empty"
+
+    let insertAndRemove () =
+      let inserted  = doInsert empty
+      let result    = doRemove inserted
+      Checker.check (fun () -> ImmMap.isEmpty result) "Expected to be empty"
+
+    let insertAndLookup () =
+      let inserted  = doInsert empty
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
+
+    let lookupInserted () =
+      let result    = doLookup lookups inserted
+      Checker.check (fun () -> result) "Expected true for all"
+
   module Map =
     open System.Collections.Generic
 
@@ -957,32 +1000,35 @@ module PerformanceTests =
 
   let testCases =
     [|
-      "Lookup"  , "Mutable Dictionary"           , Dict.lookupInserted
-      "Insert"  , "Mutable Dictionary"           , Dict.insert
-      "Remove"  , "Mutable Dictionary"           , Dict.remove
-      "Lookup"  , "Persistent Hash Map (C#)"     , PersistentHashMap.lookupInserted
-      "Insert"  , "Persistent Hash Map (C#)"     , PersistentHashMap.insert
-      "Remove"  , "Persistent Hash Map (C#)"     , PersistentHashMap.remove
-      "Lookup"  , "Persistent Hash Map (F#)"     , FsPersistentHashMap.lookupInserted
-      "Insert"  , "Persistent Hash Map (F#)"     , FsPersistentHashMap.insert
-      "Remove"  , "Persistent Hash Map (F#)"     , FsPersistentHashMap.remove
-      "Lookup"  , "Red Black Tree"               , RedBlackTree.lookupInserted
-      "Insert"  , "Red Black Tree"               , RedBlackTree.insert
-      "Lookup"  , "FSharpx.Collections"          , FSharpx.lookupInserted
-      "Insert"  , "FSharpx.Collections"          , FSharpx.insert
-      "Remove"  , "FSharpx.Collections"          , FSharpx.remove
-      "Lookup"  , "Prime.Vmap"                   , PrimeVmap.lookupInserted
-      "Insert"  , "Prime.Vmap"                   , PrimeVmap.insert
-      "Remove"  , "Prime.Vmap"                   , PrimeVmap.remove
-      "Lookup"  , "System.Collections.Immutable" , SCI.lookupInserted
-      "Insert"  , "System.Collections.Immutable" , SCI.insert
-      "Remove"  , "System.Collections.Immutable" , SCI.remove
-      "Lookup"  , "FSharp.Collections.Map"       , Map.lookupInserted
-      "Insert"  , "FSharp.Collections.Map"       , Map.insert
-      "Remove"  , "FSharp.Collections.Map"       , Map.remove
-      "Lookup"  , "FSharp.Collections.Map'"      , Map2.lookupInserted
-      "Insert"  , "FSharp.Collections.Map'"      , Map2.insert
-      "Remove"  , "FSharp.Collections.Map'"      , Map2.remove
+      "Lookup"  , "Mutable Dictionary"            , Dict.lookupInserted
+      "Insert"  , "Mutable Dictionary"            , Dict.insert
+      "Remove"  , "Mutable Dictionary"            , Dict.remove
+      "Lookup"  , "Persistent Hash Map (C#)"      , PersistentHashMap.lookupInserted
+      "Insert"  , "Persistent Hash Map (C#)"      , PersistentHashMap.insert
+      "Remove"  , "Persistent Hash Map (C#)"      , PersistentHashMap.remove
+      "Lookup"  , "Persistent Hash Map (F#)"      , FsPersistentHashMap.lookupInserted
+      "Insert"  , "Persistent Hash Map (F#)"      , FsPersistentHashMap.insert
+      "Remove"  , "Persistent Hash Map (F#)"      , FsPersistentHashMap.remove
+      "Lookup"  , "Red Black Tree"                , RedBlackTree.lookupInserted
+      "Insert"  , "Red Black Tree"                , RedBlackTree.insert
+      "Lookup"  , "FSharpx.Collections"           , FSharpx.lookupInserted
+      "Insert"  , "FSharpx.Collections"           , FSharpx.insert
+      "Remove"  , "FSharpx.Collections"           , FSharpx.remove
+      "Lookup"  , "Prime.Vmap"                    , PrimeVmap.lookupInserted
+      "Insert"  , "Prime.Vmap"                    , PrimeVmap.insert
+      "Remove"  , "Prime.Vmap"                    , PrimeVmap.remove
+      "Lookup"  , "Imms.ImmMap"                   , ImmsMap.lookupInserted
+      "Insert"  , "Imms.ImmMap"                   , ImmsMap.insert
+      "Remove"  , "Imms.ImmMap"                   , ImmsMap.remove
+      "Lookup"  , "System.Collections.Immutable"  , SCI.lookupInserted
+      "Insert"  , "System.Collections.Immutable"  , SCI.insert
+      "Remove"  , "System.Collections.Immutable"  , SCI.remove
+      "Lookup"  , "FSharp.Collections.Map"        , Map.lookupInserted
+      "Insert"  , "FSharp.Collections.Map"        , Map.insert
+      "Remove"  , "FSharp.Collections.Map"        , Map.remove
+      "Lookup"  , "FSharp.Collections.Map'"       , Map2.lookupInserted
+      "Insert"  , "FSharp.Collections.Map'"       , Map2.insert
+      "Remove"  , "FSharp.Collections.Map'"       , Map2.remove
     |]
 
   let run () =
