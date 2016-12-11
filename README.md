@@ -378,7 +378,7 @@ The data size varies over 10, 100, 1,000, 10,000 and 100,000 elements but the to
 
 *Note the scale on the y-axis is logarithmic to make the times comparable.*
 
-Something I plan to look into is why "my" maps performance degrades quicker than others when data size is close to 100,000 elements.
+Something I plan to look into is why the performance of "my" maps degrade quicker than others when data size gets close to 100,000 elements.
 
 ### Insert Execution Time In Ms (Logarithmic Scale)
 
