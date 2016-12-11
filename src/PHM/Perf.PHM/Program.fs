@@ -113,16 +113,31 @@
       let inline unset        k   (phm : PersistentHashMap<_, _>) = phm.Unset k
 
       let inline doInsert phm =
-        inserts
-        |> Array.fold (fun s (k, v) -> set k v s) phm
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
 
-      let doRemove phm =
-        removals
-        |> Array.fold (fun s (k, v) -> unset k s) phm
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
 
-      let inline doLookup fa phm =
-        fa
-        |> Array.forall (fun (k, _) -> containsKey k phm)
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
 
       let empty     = PersistentHashMap.Empty<_, _> ()
 
@@ -137,7 +152,7 @@
         Checker.check (fun () -> isEmpty result) "Expected to be empty"
 
       let lookup () =
-        let result    = doLookup lookups inserted
+        let result    = doLookup inserted
         Checker.check (fun () -> result) "Expected true for all"
 
       lookup, insert, remove
@@ -146,17 +161,38 @@
     open Persistent
 
     let createTestCases lookups inserts removals = 
+      let inline containsKey  k   phm = PersistentHashMap.containsKey k   phm
+      let inline length           phm = PersistentHashMap.length          phm
+      let inline isEmpty          phm = PersistentHashMap.isEmpty         phm
+      let inline set          k v phm = PersistentHashMap.set         k v phm
+      let inline unset        k   phm = PersistentHashMap.unset       k   phm
+
       let inline doInsert phm =
-        inserts
-        |> Array.fold (fun s (k, v) -> PersistentHashMap.set k v s) phm
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
 
-      let doRemove phm =
-        removals
-        |> Array.fold (fun s (k, v) -> PersistentHashMap.unset k s) phm
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
 
-      let inline doLookup fa phm =
-        fa
-        |> Array.forall (fun (k, _) -> PersistentHashMap.containsKey k phm)
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
 
       let empty     = PersistentHashMap.empty
 
@@ -164,34 +200,107 @@
 
       let insert () =
         let result    = doInsert empty
-        Checker.check (fun () -> PersistentHashMap.length result = PersistentHashMap.length inserted) "Expected to be same length as testSet"
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
 
       let remove () =
         let result    = doRemove inserted
-        Checker.check (fun () -> PersistentHashMap.isEmpty result) "Expected to be empty"
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
 
       let lookup () =
-        let result    = doLookup lookups inserted
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
+  module FSharpx =
+    open Patches.FSharpx.Collections
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   phm = PersistentHashMap.containsKey k   phm
+      let inline length           phm = PersistentHashMap.length          phm
+      let inline isEmpty          phm = PersistentHashMap.length          phm = 0
+      let inline set          k v phm = PersistentHashMap.add         k v phm
+      let inline unset        k   phm = PersistentHashMap.remove      k   phm
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = PersistentHashMap.empty
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
         Checker.check (fun () -> result) "Expected true for all"
 
       lookup, insert, remove
 
   module FsMap =
-    let length m =
-      m |> Map.toArray |> Array.length
-
     let createTestCases lookups inserts removals = 
+      let inline containsKey  k   m = Map.containsKey k   m
+      let inline length           m = m |> Map.toArray |> Array.length
+      let inline isEmpty          m = Map.isEmpty         m
+      let inline set          k v m = Map.add         k v m
+      let inline unset        k   m = Map.remove      k   m
+
       let inline doInsert phm =
-        inserts
-        |> Array.fold (fun s (k, v) -> Map.add k v s) phm
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
 
-      let doRemove phm =
-        removals
-        |> Array.fold (fun s (k, v) -> Map.remove k s) phm
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
 
-      let inline doLookup fa phm =
-        fa
-        |> Array.forall (fun (k, _) -> Map.containsKey k phm)
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
 
       let empty     = Map.empty
 
@@ -203,10 +312,175 @@
 
       let remove () =
         let result    = doRemove inserted
-        Checker.check (fun () -> Map.isEmpty result) "Expected to be empty"
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
 
       let lookup () =
-        let result    = doLookup lookups inserted
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
+  module PrimeVmap =
+    open Prime
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   m = Vmap.containsKey k   m
+      let inline length           m = Vmap.toSeq           m |> Seq.length
+      let inline isEmpty          m = Vmap.isEmpty         m
+      let inline set          k v m = Vmap.add         k v m
+      let inline unset        k   m = Vmap.remove      k   m
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = Vmap.makeEmpty ()
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
+  module ImmsImmMap =
+    open Imms
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   m = ImmMap.containsKey k   m
+      let inline length           m = ImmMap.length          m
+      let inline isEmpty          m = ImmMap.isEmpty         m
+      let inline set          k v m = ImmMap.set         k v m
+      let inline unset        k   m = ImmMap.remove      k   m
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = ImmMap.empty
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
+  module SCI =
+    open System.Collections.Immutable
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   (m : ImmutableDictionary<_, _>) = m.ContainsKey k
+      let inline length           (m : ImmutableDictionary<_, _>) = m.Count
+      let inline isEmpty          (m : ImmutableDictionary<_, _>) = m.IsEmpty
+      let inline set          k v (m : ImmutableDictionary<_, _>) = m.SetItem (k, v)
+      let inline unset        k   (m : ImmutableDictionary<_, _>) = m.Remove k
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = ImmutableDictionary<_, _>.Empty
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
         Checker.check (fun () -> result) "Expected true for all"
 
       lookup, insert, remove
@@ -220,12 +494,12 @@
 #if DEBUG
         1000
 #else
-//        4
-        40000
-        400
-        4000
-        40
 //        400000
+        40000
+        4000
+        400
+        40
+//        4
 #endif
       |]
 
@@ -233,6 +507,10 @@
       [|
         "Persistent Hash Map (C#)"      , CsPersistentHashMap.createTestCases
         "Persistent Hash Map (F#)"      , FsPersistentHashMap.createTestCases
+        "FSharpx.Collections"           , FSharpx.createTestCases
+        "Prime.Vmap"                    , PrimeVmap.createTestCases
+        "Imms.ImmMap"                   , ImmsImmMap.createTestCases
+        "System.Collections.Immutable"  , SCI.createTestCases
         "Map (F#)"                      , FsMap.createTestCases
       |]
 
