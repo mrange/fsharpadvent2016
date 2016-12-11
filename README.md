@@ -13,6 +13,7 @@
   4. **Bug fixes** - Fixed an issue in "my" maps that caused the **Remove** performance results to be better than expected.
 2. **2016-12-11**
   1. **New performance test** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms).
+  1. **New performance test** - Added performance tests that varies the data size
 
 ## Background
 
@@ -335,15 +336,13 @@ To be able to compare the Java code with .NET code I implemented a simple random
 
 I merely estimated the Red Black Tree removal time as I never implemented remove (too hard for me).
 
-*For the future; the size of the data effects performance characteristics so data size that should be varied.*
-
 ### Execution Time In Ms (Logarithmic Scale)
 
 [![Execution Time In Ms (Logarithmic Scale)][1]][1]
 
 *Note the scale on the y-axis is logarithmic to make the times comparable.*
 
-As expected the map based on `System.Collections.Generic.Dictionary<_, _>` has the best **Lookup** performance but also has the worst performance for **Insert** and **Remove**. This is because in order to support immutability a full copy is taken whenever a key is added or removed. If your code can accept destructive updates `System.Collections.Generic.Dictionary<_, _>` performs a lot better.
+As expected the map based on `System.Collections.Generic.Dictionary<_, _>` has the best **Lookup** performance but also has the worst performance for **Insert** and **Remove**. This is because to support immutability a full copy is taken whenever a key is added or removed. If your code can accept destructive updates `System.Collections.Generic.Dictionary<_, _>` performs a lot better.
 
 We see that F# Map **Lookup** performance is quite poor but with a custom comparer it does a lot better. It turns out that F# generic comparer [does a lot](#user-content-equality-vs-iequatable_).
 
@@ -355,7 +354,43 @@ We see that F# Map **Lookup** performance is quite poor but with a custom compar
 
 The number of Garbage Collection that was run during executing gives an estimate of the memory overhead of the various data structures. Lower is better.
 
-`System.Collections.Generic.Dictionary<_, _>` does poorly because in order to support immutability a full copy is taken whenever a key is added or removed. If your code can accept destructive updates `System.Collections.Generic.Dictionary<_, _>` performs a lot better.
+`System.Collections.Generic.Dictionary<_, _>` does poorly because to support immutability a full copy is taken whenever a key is added or removed. If your code can accept destructive updates `System.Collections.Generic.Dictionary<_, _>` performs a lot better.
+
+## Measuring performance dependent on data size
+
+In addition, it's interesting to see the **Lookup**, **Insert** and **Remove** performance depending on the data size.
+
+For these tests I focused on the following algorithms:
+
+2. **Persistent Hash Map (C#)** - "My" Map written in C#
+3. **Persistent Hash Map (F#)** - "My" Map written in F#
+5. **FSharpx.Collections.PersistentHashMap**
+6. **Prime.Vmap** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
+7. **Imms.ImmMap** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms)
+8. **System.Collections.Immutable.ImmutableDictionary**
+9. **FSharp.Collections.Map**
+
+The data size varies over 10, 100, 1,000, 10,000 and 100,000 elements but the total work is kept constant to make times comparable.
+
+### Lookup Execution Time In Ms (Logarithmic Scale)
+
+[![Lookup Execution Time In Ms (Logarithmic Scale)][3]][3]
+
+*Note the scale on the y-axis is logarithmic to make the times comparable.*
+
+Something I plan to look into is why the performance of "my" maps degrade quicker than others when data size gets close to 100,000 elements.
+
+### Insert Execution Time In Ms (Logarithmic Scale)
+
+[![Insert Execution Time In Ms (Logarithmic Scale)][4]][4]
+
+*Note the scale on the y-axis is logarithmic to make the times comparable.*
+
+### Remove Execution Time In Ms (Logarithmic Scale)
+
+[![Remove Execution Time In Ms (Logarithmic Scale)][5]][5]
+
+*Note the scale on the y-axis is logarithmic to make the times comparable.*
 
 ## Wrapping up
 
@@ -931,3 +966,6 @@ So for the future it can be good to keep in mind that while updating reference f
 
   [1]: http://i.imgur.com/527IMkO.png
   [2]: http://i.imgur.com/aFf1PgF.png
+  [3]: http://i.imgur.com/S87V5jG.png
+  [4]: http://i.imgur.com/uRD0Z5C.png
+  [5]: http://i.imgur.com/o2Av1pF.png
