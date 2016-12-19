@@ -252,16 +252,16 @@
 
     let testCases =
       [|
-//        "Imperative"                    , ImperativePerf.createTestCases
-//        "Seq"                           , SeqPerf.createTestCases
+        "Imperative"                    , ImperativePerf.createTestCases
+        "Seq"                           , SeqPerf.createTestCases
         "Seq2"                          , Seq2Perf.createTestCases
-//        "Linq"                          , LinqPerf.createTestCases
-//        "Nessos.Streams"                , NessosStreamsPerf.createTestCases
+        "Linq"                          , LinqPerf.createTestCases
+        "Nessos.Streams"                , NessosStreamsPerf.createTestCases
 ////        "Nessos.LinqOptimizer"          , NessosLinqOptimizerPerf.createTestCases
-//        "SeqComposer"                   , SeqComposerPerf.createTestCases
-//        "PullStream"                    , PullStreamPerf.createTestCases
-//        "PushStream"                    , PushStreamPerf.createTestCases
-//        "PushPipe"                      , PushPipePerf.createTestCases
+        "SeqComposer"                   , SeqComposerPerf.createTestCases
+        "PullStream"                    , PullStreamPerf.createTestCases
+        "PushStream"                    , PushStreamPerf.createTestCases
+        "PushPipe"                      , PushPipePerf.createTestCases
       |]
 
     let results = ResizeArray 16
