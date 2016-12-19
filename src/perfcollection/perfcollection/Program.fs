@@ -9,7 +9,7 @@
 
   // now () returns current time in milliseconds since start
   let now : unit -> int64 =
-    let sw = System.Diagnostics.Stopwatch ()
+    let sw = Stopwatch ()
     sw.Start ()
     fun () -> sw.ElapsedMilliseconds
 
@@ -84,6 +84,22 @@
       simple
 
   module SeqPerf =
+    let createTestCases count =
+      let inline range  c   = Seq.init c id
+      let inline filter f s = Seq.filter f s
+      let inline map    m s = Seq.map    m s
+      let inline sum      s = Seq.sum    s
+      let simple () =
+        range count
+        |> map    (fun n -> int64 n * 5L)
+        |> filter (fun n -> n % 7L <> 0L)
+        |> map    (fun n -> n / 11L)
+        |> sum
+      simple
+
+  module Seq2Perf =
+    open Seq.Microsoft.FSharp.Collections
+
     let createTestCases count =
       let inline range  c   = Seq.init c id
       let inline filter f s = Seq.filter f s
@@ -213,7 +229,11 @@
 
   let run () =
 //    let random      = makeRandom 19740531
+#if DEBUG
+    let total       = 100000
+#else
     let total       = 10000000
+#endif
     let outers      =
       [|
 #if DEBUG
@@ -232,15 +252,16 @@
 
     let testCases =
       [|
-        "Imperative"                    , ImperativePerf.createTestCases
-        "Seq"                           , SeqPerf.createTestCases
-        "Linq"                          , LinqPerf.createTestCases
-        "Nessos.Streams"                , NessosStreamsPerf.createTestCases
-//        "Nessos.LinqOptimizer"          , NessosLinqOptimizerPerf.createTestCases
-        "SeqComposer"                   , SeqComposerPerf.createTestCases
-        "PullStream"                    , PullStreamPerf.createTestCases
-        "PushStream"                    , PushStreamPerf.createTestCases
-        "PushPipe"                      , PushPipePerf.createTestCases
+//        "Imperative"                    , ImperativePerf.createTestCases
+//        "Seq"                           , SeqPerf.createTestCases
+        "Seq2"                          , Seq2Perf.createTestCases
+//        "Linq"                          , LinqPerf.createTestCases
+//        "Nessos.Streams"                , NessosStreamsPerf.createTestCases
+////        "Nessos.LinqOptimizer"          , NessosLinqOptimizerPerf.createTestCases
+//        "SeqComposer"                   , SeqComposerPerf.createTestCases
+//        "PullStream"                    , PullStreamPerf.createTestCases
+//        "PushStream"                    , PushStreamPerf.createTestCases
+//        "PushPipe"                      , PushPipePerf.createTestCases
       |]
 
     let results = ResizeArray 16

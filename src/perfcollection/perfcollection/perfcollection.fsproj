@@ -79,6 +79,7 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Seq.fs" />
     <Compile Include="SeqComposer.fs" />
     <Compile Include="PullStream.fs" />
     <Compile Include="PushPipe.fs" />
