@@ -302,24 +302,19 @@ namespace Seq.Microsoft.FSharp.Collections
               let finalIndex  = match lastOption with
                                 | Some b -> b             // here b>=0, a valid end value.
                                 | None   -> unreachable   // run "forever", well as far as Int32.MaxValue since indexing with a bounded type.
-              // The Current value for a valid index is "f i".
-              // Lazy<_> values are used as caches, to store either the result or an exception if thrown.
-              // These "Lazy<_>" caches are created only on the first call to current and forced immediately.
-              // The lazy creation of the cache nodes means enumerations that skip many Current values are not delayed by GC.
-              // For example, the full enumeration of Seq.initInfinite in the tests.
-              // state
-              let index   = ref unstarted
-              // a Lazy node to cache the result/exception
-              let current = ref (Unchecked.defaultof<_>)
-              let setIndex i = index := i; current := (Unchecked.defaultof<_>) // cache node unprimed, initialised on demand.
+              let hasCurrent  = ref false
+              let current     = ref Unchecked.defaultof<_>
+              let index       = ref unstarted
+              let setIndex i  = index := i; hasCurrent := false
               let getCurrent() =
                   if !index = unstarted then notStarted()
                   if !index = completed then alreadyFinished()
-                  match box !current with
-                  | null -> current := Lazy<_>.Create(fun () -> f !index);
-                  | _ ->  ()
-                  // forced or re-forced immediately.
-                  (!current).Force()
+                  if !hasCurrent then
+                    !current
+                  else
+                    current     := f !index
+                    hasCurrent  := true
+                    !current
               { new IEnumerator<'U> with
                     member x.Current = getCurrent()
                 interface IEnumerator with
