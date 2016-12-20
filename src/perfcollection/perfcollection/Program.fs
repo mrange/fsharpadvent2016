@@ -174,6 +174,22 @@
         |> sum
       simple
 
+  module SeqComposer2Perf =
+    open SeqComposer.Microsoft.FSharp.Collections
+
+    let createTestCases count =
+      let inline range  c   = Composer.init c id
+      let inline filter f s = Composer.filter f s
+      let inline map    m s = Composer.map    m s
+      let inline sum      s = Composer.sum    s
+      let simple () =
+        range count
+        |> map    (fun n -> int64 n * 5L)
+        |> filter (fun n -> n % 7L <> 0L)
+        |> map    (fun n -> n / 11L)
+        |> sum
+      simple
+
   module PullStreamPerf =
     open PullStream
 
@@ -209,17 +225,18 @@
   module PushPipePerf =
     open PushPipe
 
+    let range             = Pipe.acceptRange
+    let inline filter f s = Pipe.filter f s
+    let inline map    m s = Pipe.map    m s
+    let inline sum      s = Pipe.sum    s
+    let simplePipe =
+      range
+      |> map    (fun n -> int64 n * 5L)
+      |> filter (fun n -> n % 7L <> 0L)
+      |> map    (fun n -> n / 11L)
+      |> sum
+
     let createTestCases count =
-      let range             = Pipe.acceptRange
-      let inline filter f s = Pipe.filter f s
-      let inline map    m s = Pipe.map    m s
-      let inline sum      s = Pipe.sum    s
-      let simplePipe =
-        range
-        |> map    (fun n -> int64 n * 5L)
-        |> filter (fun n -> n % 7L <> 0L)
-        |> map    (fun n -> n / 11L)
-        |> sum
       let simpleRange = 0, 1, count - 1
       let simple () =
         Pipe.reset    simplePipe
@@ -257,8 +274,9 @@
         "Seq2"                          , Seq2Perf.createTestCases
         "Linq"                          , LinqPerf.createTestCases
         "Nessos.Streams"                , NessosStreamsPerf.createTestCases
-////        "Nessos.LinqOptimizer"          , NessosLinqOptimizerPerf.createTestCases
+//        "Nessos.LinqOptimizer"          , NessosLinqOptimizerPerf.createTestCases
         "SeqComposer"                   , SeqComposerPerf.createTestCases
+        "SeqComposer2"                  , SeqComposer2Perf.createTestCases
         "PullStream"                    , PullStreamPerf.createTestCases
         "PushStream"                    , PushStreamPerf.createTestCases
         "PushPipe"                      , PushPipePerf.createTestCases
