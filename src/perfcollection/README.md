@@ -50,7 +50,7 @@ So without further ado:
 
 ## Collection Count - F# 4, .NET 4.6.2, x64
 
-![Collection Count - F# 4, .NET 4.6.2, x64](http://i.imgur.com/qcH1d73.png)
+![Collection Count - F# 4, .NET 4.6.2, x64](http://i.imgur.com/2Bep6O3.png)
 
 ## Interpreting the results
 
@@ -86,8 +86,12 @@ While this gives almost "imperative" performance for large collections it also g
 
 ### **Seq** performance
 
-The careful reader notices two **Seq** measurements. **Seq2** contains a modified version of `Seq.upto` that doesn't allocate objects needlessly. This improves performance by approximately  4 times and reduces the memory pressure. Perhaps becomes an F# PR later.
+The careful reader notices two **Seq** measurements. **Seq2** contains a modified version of `Seq.upto` that doesn't allocate objects needlessly. This improves performance by approximately 4 times and reduces the memory pressure. It's a bit of challenge to get the semantics of `upto` to be exactly as before but if I succeed this should become an F# PR.
 
-Finally, **SeqComposer** is taken from the PR that seeks to replace **Seq**. It improves **Seq** performance by roughly an order of magnitude which is a major improvement. **Nessos.Streams** still performs better for this pipeline though.
+### **SeqComposer** brings significant performance improvements
+
+Finally, **SeqComposer** is taken from the PR that seeks to replace **Seq**. It improves **Seq** performance by roughly an order of magnitude which is a welcome improvement.
+
+Hope you found this interesting,
 
 Mårten
