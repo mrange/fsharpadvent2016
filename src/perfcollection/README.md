@@ -2,6 +2,12 @@
 
 *[Full source code can be found here](https://github.com/mrange/fsharpadvent2016/tree/master/src/perfcollection)*
 
+
+## Changelog
+
+1. **2016-12-20**
+  1. **New performance test** - Paul Westcott ([@manofstick](https://github.com/manofstick)) made me aware that SeqComposer has a more performant API. **SeqComposer2** uses this API.
+
 As F# developers we all know about **Seq** that allows us to transform data using pipelines:
 
 ```fsharp
@@ -20,10 +26,11 @@ There are many competing data pipelines to chose from.
 2. **Linq** - **Linq** + some F# idiomatic wrappers is totally ok
 3. **[Nessos.Streams](https://github.com/nessos/streams)** - The gurus at *Nessos* created a data pipeline that supports push, pull, parallelism, cancelability and so on. It's also supposed to be really fast
 5. **[SeqComposer](https://github.com/Microsoft/visualfsharp/pull/1570)** - There's a PR in F# repository that intends to improve performance of **Seq**.
-5. **PullStream** - I implemented a simple pull (like **Seq**) data pipeline to compare against
-6. **PushStream** - I implemented a simple push (like supported by **Nessos.Streams**) data pipeline to compare against
-7. **PushPipe** - A variant of **PushStream** intended to reduce the overhead of creating data pipelines.
-8. **[Nessos.LinqOptimizer](https://github.com/nessos/LinqOptimizer)** - While **Nessos.Streams** is cool, compared to **Nessos.LinqOptimizer** it pales as the later optimizes the data pipeline when constructed to improve performance.
+6. **[SeqComposer2](https://github.com/Microsoft/visualfsharp/pull/1570)** - Paul Westcott ([@manofstick](https://github.com/manofstick)) made me aware that SeqComposer has a more performant API. **SeqComposer2** uses this API.
+7. **PullStream** - I implemented a simple pull (like **Seq**) data pipeline to compare against
+8. **PushStream** - I implemented a simple push (like supported by **Nessos.Streams**) data pipeline to compare against
+9. **PushPipe** - A variant of **PushStream** intended to reduce the overhead of creating data pipelines.
+10. **[Nessos.LinqOptimizer](https://github.com/nessos/LinqOptimizer)** - While **Nessos.Streams** is cool, compared to **Nessos.LinqOptimizer** it pales as the later optimizes the data pipeline when constructed to improve performance.
 
 I asked myself; *which data pipeline has the lowest overhead?*
 
@@ -46,11 +53,11 @@ So without further ado:
 
 ## Performance in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/KJgNejl.png)
+![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/ak73l7d.png)
 
 ## Collection Count - F# 4, .NET 4.6.2, x64
 
-![Collection Count - F# 4, .NET 4.6.2, x64](http://i.imgur.com/2Bep6O3.png)
+![Collection Count - F# 4, .NET 4.6.2, x64](http://i.imgur.com/6Df3fS9.png)
 
 ## Interpreting the results
 
@@ -90,7 +97,7 @@ The careful reader notices two **Seq** measurements. **Seq2** contains a modifie
 
 ### **SeqComposer** brings significant performance improvements
 
-Finally, **SeqComposer** is taken from the PR that seeks to replace **Seq**. It improves **Seq** performance by roughly an order of magnitude which is a welcome improvement.
+Finally, **SeqComposer** is taken from the PR that seeks to replace **Seq**. It improves **Seq** performance by roughly an order of magnitude which is a welcome improvement. The improvement is even greater if one uses the `Composer` directly.
 
 Hope you found this interesting,
 
