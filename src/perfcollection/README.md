@@ -69,7 +69,7 @@ So without further ado:
 
 The imperative code is the fastest in general. The reason for this is that it is implemented as an efficient for loop.
 
-Other pipelines creates intermediate objects that support constructing the pipeline, this creates memory pressure. In order to pass values down the pipeline virtual dispatch is used which is hard for the JIT:er to inline.
+Other pipelines create intermediate objects that support constructing the pipeline, this creates memory pressure. In order to pass values down the pipeline virtual dispatch is used which is hard for the jitter to inline.
 
 I implemented a few data pipelines in C++ and modern C++ compilers are able to eliminate the intermediate objects. What remains typically is an optimized loop with almost identical performance to imperative code. That's pretty cool.
 
@@ -172,7 +172,7 @@ If one disassemble the JIT:ed code it looks like this:
 00007FFD90933121  jmp         00007FFD909330C4
 ```
 
-This is an for-loop with some clever tricks to avoid expensive divisions.
+This is a for-loop with some clever tricks to avoid expensive divisions.
 
 Let's compare it with the **PushPipe**:
 
@@ -268,7 +268,7 @@ The JIT:ed looks like this:
 
 ; map (fun n -> n / 11L)
 ;   Lots of extra instructions to avoid the divide
-; Load function object to next step
+; Load (sum) function object
 00007ffd`909347a0 488b4908        mov     rcx,qword ptr [rcx+8]
 00007ffd`909347a4 48b8a38b2ebae8a28b2e mov rax,2E8BA2E8BA2E8BA3h
 00007ffd`909347ae 48f7ea          imul    rdx
@@ -293,16 +293,16 @@ The JIT:ed looks like this:
 00007ffd`909347f4 488bc8          mov     rcx,rax
 ; Load acc
 00007ffd`909347f7 488b4008        mov     rax,qword ptr [rax+8]
-; Increment acc
+; Increment acc (unchecked addition)
 00007ffd`909347fb 4803c2          add     rax,rdx
 ; Store increment
 00007ffd`909347fe 48894108        mov     qword ptr [rcx+8],rax
-; Return to range count (returns true to continue iterating)
+; Return to top loop count (returns true to continue iterating)
 00007ffd`90934802 b801000000      mov     eax,1
 00007ffd`90934807 c3              ret
 ```
 
-There are lot of similarities with the **Imperative** code but we see virtual tail calls in the JIT:ed code. The reason for this is this.
+There are lot of similarities with the **Imperative** code but we see virtual tail calls in the JIT:ed code. The reason is this.
 
 A `PushPipe<'T>` is defined like this
 
@@ -313,9 +313,9 @@ type Receiver<'T> = 'T            -> bool
 type Stream<'T>   = Receiver<'T>  -> unit
 ```
 
-`Stream<'T>` is used to build up a chain of `Receiver<'T>`. Each value in the stream passed to the next receiver using virtual dispatch. These are the virtual dispatch we see in the JIT:ed code for **PushPipe**.
+`Stream<'T>` is used to build up a chain of `Receiver<'T>`. Each value in the stream passed to the next receiver using virtual dispatch. This is the reason why we see virtual calls in the JIT:ed code for **PushPipe**.
 
-In principle the F# compiler could eliminate the virtual tail calls but currently it doesn't. Unfortunately, the JIT:er neither have enough information nor time to inline the virtual calls.
+In principle the F# compiler could eliminate the virtual tail calls but currently it doesn't. Unfortunately, the jitter neither have enough information nor time to inline the virtual calls.
 
 This is the reason that **Imperative** performs better than **PushPipe**.
 
@@ -326,15 +326,18 @@ We can do a similar analysis for **SeqComparer2**:
 ;   outOfBand.HaltedIdx = 0?
 00007ffd`90955d8b 837e0c00        cmp     dword ptr [rsi+0Ch],0
 00007ffd`90955d8f 754e            jne     00007ffd`90955ddf
+; True branch
 ; idx < terminatingIdx?
 00007ffd`90955d91 3b6b10          cmp     ebp,dword ptr [rbx+10h]
 00007ffd`90955d94 0f9cc1          setl    cl
 00007ffd`90955d97 0fb6c9          movzx   ecx,cl
 00007ffd`90955d9a 85c9            test    ecx,ecx
 00007ffd`90955d9c 7441            je      00007ffd`90955ddf
+; True branch
 00007ffd`90955d9e 4585ff          test    r15d,r15d
 ; maybeSkipping?
 00007ffd`90955da1 7413            je      00007ffd`90955db6
+; True branch
 00007ffd`90955da3 498bce          mov     rcx,r14
 00007ffd`90955da6 33d2            xor     edx,edx
 ; Load MethodTable
@@ -347,6 +350,7 @@ We can do a similar analysis for **SeqComparer2**:
 ; not maybeSkipping?
 00007ffd`90955db6 4585ff          test    r15d,r15d
 00007ffd`90955db9 7520            jne     00007ffd`90955ddb
+; True branch
 ; Load id function object
 00007ffd`90955dbb 488b4b08        mov     rcx,qword ptr [rbx+8]
 00007ffd`90955dbf 8d5501          lea     edx,[rbp+1]
@@ -401,6 +405,7 @@ We can do a similar analysis for **SeqComparer2**:
 ; n % 7L <> 0L?
 00007ffd`90955f2d 4885c0          test    rax,rax
 00007ffd`90955f30 7415            je      00007ffd`90955f47
+; True branch
 ; Load (map    (fun n -> n / 11L)) function object
 00007ffd`90955f32 488b4918        mov     rcx,qword ptr [rcx+18h]
 00007ffd`90955f36 498bd0          mov     rdx,r8
@@ -412,6 +417,7 @@ We can do a similar analysis for **SeqComparer2**:
 00007ffd`90955f40 488b4030        mov     rax,qword ptr [rax+30h]
 ; Tail call virtual function (map    (fun n -> n / 11L))
 00007ffd`90955f44 48ffe0          jmp     rax
+; False branch
 ; Set rax to 0 to indicate we like to continue
 00007ffd`90955f47 33c0            xor     eax,eax
 00007ffd`90955f49 c3              ret
