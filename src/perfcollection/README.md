@@ -89,7 +89,7 @@ This inspired me to create the **PushPipe** that allows reusing the pipeline ove
 
 ### **Nessos.LinqOptimizer**
 
-**Nessos.LinqOptimizer** is both among the worst and among the best. The reason is that there's a huge overhead of creating the data pipeline because **Nessos.LinqOptimizer** analyzes the expression trees, optimizes them, compiles them into ILCode which is then JIT:ed.
+**Nessos.LinqOptimizer** is both among the worst and among the best. The reason is that there's a huge overhead of creating the data pipeline because **Nessos.LinqOptimizer** analyzes the expression trees, optimizes them, compiles them into ILCode which is then jitted.
 
 While this gives almost "imperative" performance for large collections it also gives poor performance for small collections. I think **Nessos.LinqOptimizer** could benefit from being able to cache and reuse the pipeline and I was looking for such a thing in the API but didn't find it.
 
@@ -129,7 +129,7 @@ let simple () =
   simpleLoop 0L 0
 ```
 
-If one disassemble the JIT:ed code it looks like this:
+If one disassemble the jitted code it looks like this:
 
 ```asm
 ; if i < count then
@@ -191,7 +191,7 @@ Let's compare it with the **PushPipe**:
     simple
 ```
 
-The JIT:ed looks like this:
+The jitted looks like this:
 
 ```asm
 ; range count
@@ -302,7 +302,7 @@ The JIT:ed looks like this:
 00007ffd`90934807 c3              ret
 ```
 
-There are lot of similarities with the **Imperative** code but we see virtual tail calls in the JIT:ed code. The reason is this.
+There are lot of similarities with the **Imperative** code but we see virtual tail calls in the jitted code. The reason is this.
 
 A `PushPipe<'T>` is defined like this
 
@@ -313,7 +313,7 @@ type Receiver<'T> = 'T            -> bool
 type Stream<'T>   = Receiver<'T>  -> unit
 ```
 
-`Stream<'T>` is used to build up a chain of `Receiver<'T>`. Each value in the stream passed to the next receiver using virtual dispatch. This is the reason why we see virtual calls in the JIT:ed code for **PushPipe**.
+`Stream<'T>` is used to build up a chain of `Receiver<'T>`. Each value in the stream passed to the next receiver using virtual dispatch. This is the reason why we see virtual calls in the jitted code for **PushPipe**.
 
 In principle the F# compiler could eliminate the virtual tail calls but currently it doesn't. Unfortunately, the jitter neither have enough information nor time to inline the virtual calls.
 
