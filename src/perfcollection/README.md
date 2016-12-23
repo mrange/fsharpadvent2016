@@ -7,6 +7,8 @@
 
 1. **2016-12-20**
   1. **New performance test** - Paul Westcott ([@manofstick](https://github.com/manofstick)) made me aware that SeqComposer has a more performant API. **SeqComposer2** uses this API.
+1. **2016-12-23**
+  1. **Analysis of performance difference** - Added an appendix with an analysis to explain the performance difference between **Imperative** and **PushPipe**.
 
 As F# developers we all know about **Seq** that allows us to transform data using pipelines:
 
@@ -149,6 +151,7 @@ If one disassemble the JIT:ed code it looks like this:
 00007FFD909330EC  imul        rax,rax,7
 00007FFD909330F0  mov         rdx,rcx
 00007FFD909330F3  sub         rdx,rax
+; n % 7L <> 0L?
 00007FFD909330F6  test        rdx,rdx
 00007FFD909330F9  je          00007FFD9093311F
 ; let n = n / 11L
@@ -169,7 +172,7 @@ If one disassemble the JIT:ed code it looks like this:
 00007FFD90933121  jmp         00007FFD909330C4
 ```
 
-This is basically an efficient loop implement x64 with some tricks to avoid division (expensive).
+This is an for-loop with some clever tricks to avoid expensive divisions.
 
 Let's compare it with the **PushPipe**:
 
@@ -192,10 +195,10 @@ The JIT:ed looks like this:
 
 ```asm
 ; range count
-; if i <= e
+; i <= e?
 00007ffd`909535d7 3bf3            cmp     esi,ebx
 00007ffd`909535d9 7f20            jg      00007ffd`909535fb
-; if r i
+; r i
 00007ffd`909535db 488bcf          mov     rcx,rdi
 00007ffd`909535de 8bd6            mov     edx,esi
 ; Load MethodTable
@@ -204,9 +207,11 @@ The JIT:ed looks like this:
 00007ffd`909535e3 488b4040        mov     rax,qword ptr [rax+40h]
 ; Call virtual function (map (fun n -> int64 n * 5L))
 00007ffd`909535e7 ff5020          call    qword ptr [rax+20h]
+; r i?
 00007ffd`909535ea 84c0            test    al,al
 00007ffd`909535ec 7404            je      00007ffd`909535f2
-; rangeForward s e r (i + s)
+; True branch
+; i + s and loop
 00007ffd`909535ee 03f5            add     esi,ebp
 00007ffd`909535f0 ebe0            jmp     00007ffd`909535d7
 
@@ -215,7 +220,7 @@ The JIT:ed looks like this:
 00007ffd`90953620 4863d2          movsxd  rdx,edx
 ; *5L
 00007ffd`90953623 486bd205        imul    rdx,rdx,5
-; Load this
+; Load (filter (fun n -> n % 7L <> 0L)) function object
 00007ffd`90953627 488b4908        mov     rcx,qword ptr [rcx+8]
 ; Load MethodTable
 00007ffd`9095362b 488b01          mov     rax,qword ptr [rcx]
@@ -241,11 +246,11 @@ The JIT:ed looks like this:
 00007ffd`90953673 486bd207        imul    rdx,rdx,7
 00007ffd`90953677 498bc0          mov     rax,r8
 00007ffd`9095367a 482bc2          sub     rax,rdx
-; Test condition
+; n % 7L <> 0L?
 00007ffd`9095367d 4885c0          test    rax,rax
 00007ffd`90953680 7415            je      00007ffd`90953697
-; True case
-; Load this
+; True branch
+; Load (map (fun n -> n / 11L)) function object
 00007ffd`90953682 488b4908        mov     rcx,qword ptr [rcx+8]
 00007ffd`90953686 498bd0          mov     rdx,r8
 ; Load MethodTable
@@ -256,14 +261,14 @@ The JIT:ed looks like this:
 00007ffd`90953690 488b4020        mov     rax,qword ptr [rax+20h]
 ; Tail call virtual function (map (fun n -> n / 11L))
 00007ffd`90953694 48ffe0          jmp     rax
-; False case
+; False branch
 ; Return to range count (returns true to continue iterating)
 00007ffd`90953697 b801000000      mov     eax,1
 00007ffd`9095369c c3              ret
 
 ; map (fun n -> n / 11L)
 ;   Lots of extra instructions to avoid the divide
-; Load this
+; Load function object to next step
 00007ffd`909347a0 488b4908        mov     rcx,qword ptr [rcx+8]
 00007ffd`909347a4 48b8a38b2ebae8a28b2e mov rax,2E8BA2E8BA2E8BA3h
 00007ffd`909347ae 48f7ea          imul    rdx
@@ -310,9 +315,172 @@ type Stream<'T>   = Receiver<'T>  -> unit
 
 `Stream<'T>` is used to build up a chain of `Receiver<'T>`. Each value in the stream passed to the next receiver using virtual dispatch. These are the virtual dispatch we see in the JIT:ed code for **PushPipe**.
 
-In principle the F# compiler could eliminate the virtual tail calls but currently it doesn't. The JIT:er doesn't have enough information nor time to inline the virtual calls.
+In principle the F# compiler could eliminate the virtual tail calls but currently it doesn't. Unfortunately, the JIT:er neither have enough information nor time to inline the virtual calls.
 
 This is the reason that **Imperative** performs better than **PushPipe**.
 
+We can do a similar analysis for **SeqComparer2**:
 
+```asm
+; Composer.init c id
+;   outOfBand.HaltedIdx = 0?
+00007ffd`90955d8b 837e0c00        cmp     dword ptr [rsi+0Ch],0
+00007ffd`90955d8f 754e            jne     00007ffd`90955ddf
+; idx < terminatingIdx?
+00007ffd`90955d91 3b6b10          cmp     ebp,dword ptr [rbx+10h]
+00007ffd`90955d94 0f9cc1          setl    cl
+00007ffd`90955d97 0fb6c9          movzx   ecx,cl
+00007ffd`90955d9a 85c9            test    ecx,ecx
+00007ffd`90955d9c 7441            je      00007ffd`90955ddf
+00007ffd`90955d9e 4585ff          test    r15d,r15d
+; maybeSkipping?
+00007ffd`90955da1 7413            je      00007ffd`90955db6
+00007ffd`90955da3 498bce          mov     rcx,r14
+00007ffd`90955da6 33d2            xor     edx,edx
+; Load MethodTable
+00007ffd`90955da8 498b06          mov     rax,qword ptr [r14]
+; Load vtable
+00007ffd`90955dab 488b4040        mov     rax,qword ptr [rax+40h]
+; Call virtual function (isSkipping ())
+00007ffd`90955daf ff5020          call    qword ptr [rax+20h]
+00007ffd`90955db2 440fb6f8        movzx   r15d,al
+; not maybeSkipping?
+00007ffd`90955db6 4585ff          test    r15d,r15d
+00007ffd`90955db9 7520            jne     00007ffd`90955ddb
+; Load id function object
+00007ffd`90955dbb 488b4b08        mov     rcx,qword ptr [rbx+8]
+00007ffd`90955dbf 8d5501          lea     edx,[rbp+1]
+; Load MethodTable
+00007ffd`90955dc2 488b01          mov     rax,qword ptr [rcx]
+; Load vtable
+00007ffd`90955dc5 488b4040        mov     rax,qword ptr [rax+40h]
+; Call virtual function (id)
+00007ffd`90955dc9 ff5020          call    qword ptr [rax+20h]
+00007ffd`90955dcc 8bd0            mov     edx,eax
+00007ffd`90955dce 488bcf          mov     rcx,rdi
+; Load (map (fun n -> int64 n * 5L)) function object
+00007ffd`90955dd1 488b07          mov     rax,qword ptr [rdi]
+; Load MethodTable
+00007ffd`90955dd4 488b4040        mov     rax,qword ptr [rax+40h]
+; Call virtual function (map (fun n -> int64 n * 5L))
+00007ffd`90955dd8 ff5030          call    qword ptr [rax+30h]
+; idx <- idx + 1
+00007ffd`90955ddb ffc5            inc     ebp
+00007ffd`90955ddd ebac            jmp     00007ffd`90955d8b
+
+; map    (fun n -> int64 n * 5L)
+; int64 n
+00007ffd`90955ed0 4863d2          movsxd  rdx,edx
+; * 5L
+00007ffd`90955ed3 486bd205        imul    rdx,rdx,5
+; Load (filter (fun n -> n % 7L <> 0L)) function object
+00007ffd`90955ed7 488b4918        mov     rcx,qword ptr [rcx+18h]
+; Load MethodTable
+00007ffd`90955edb 488b01          mov     rax,qword ptr [rcx]
+; Load vtable
+00007ffd`90955ede 488b4040        mov     rax,qword ptr [rax+40h]
+; Load virtual function
+00007ffd`90955ee2 488b4030        mov     rax,qword ptr [rax+30h]
+; Tail call virtual function (filter (fun n -> n % 7L <> 0L))
+00007ffd`90955ee6 48ffe0          jmp     rax
+
+; filter (fun n -> n % 7L <> 0L)
+;   Lots of instructions to avoid the division
+00007ffd`90955f00 4c8bc2          mov     r8,rdx
+00007ffd`90955f03 48b82549922449922449 mov rax,4924924924924925h
+00007ffd`90955f0d 49f7e8          imul    r8
+00007ffd`90955f10 488bc2          mov     rax,rdx
+00007ffd`90955f13 488bd0          mov     rdx,rax
+00007ffd`90955f16 48d1fa          sar     rdx,1
+00007ffd`90955f19 488bc2          mov     rax,rdx
+00007ffd`90955f1c 48c1e83f        shr     rax,3Fh
+00007ffd`90955f20 4803d0          add     rdx,rax
+00007ffd`90955f23 486bd207        imul    rdx,rdx,7
+00007ffd`90955f27 498bc0          mov     rax,r8
+00007ffd`90955f2a 482bc2          sub     rax,rdx
+; n % 7L <> 0L?
+00007ffd`90955f2d 4885c0          test    rax,rax
+00007ffd`90955f30 7415            je      00007ffd`90955f47
+; Load (map    (fun n -> n / 11L)) function object
+00007ffd`90955f32 488b4918        mov     rcx,qword ptr [rcx+18h]
+00007ffd`90955f36 498bd0          mov     rdx,r8
+; Load MethodTable
+00007ffd`90955f39 488b01          mov     rax,qword ptr [rcx]
+; Load vtable
+00007ffd`90955f3c 488b4040        mov     rax,qword ptr [rax+40h]
+; Load virtual function
+00007ffd`90955f40 488b4030        mov     rax,qword ptr [rax+30h]
+; Tail call virtual function (map    (fun n -> n / 11L))
+00007ffd`90955f44 48ffe0          jmp     rax
+; Set rax to 0 to indicate we like to continue
+00007ffd`90955f47 33c0            xor     eax,eax
+00007ffd`90955f49 c3              ret
+
+; map    (fun n -> n / 11L)
+;   Lots of instructions to avoid the division
+00007ffd`90957145 48b8a38b2ebae8a28b2e mov rax,2E8BA2E8BA2E8BA3h
+00007ffd`9095714f 48f7ee          imul    rsi
+00007ffd`90957152 488bc2          mov     rax,rdx
+00007ffd`90957155 488bc8          mov     rcx,rax
+00007ffd`90957158 48d1f9          sar     rcx,1
+00007ffd`9095715b 488bd1          mov     rdx,rcx
+00007ffd`9095715e 48c1ea3f        shr     rdx,3Fh
+00007ffd`90957162 4803ca          add     rcx,rdx
+00007ffd`90957165 488bd1          mov     rdx,rcx
+00007ffd`90957168 488bcf          mov     rcx,rdi
+; Load MethodTable
+00007ffd`9095716b 488b07          mov     rax,qword ptr [rdi]
+; Load vtable
+00007ffd`9095716e 488b4040        mov     rax,qword ptr [rax+40h]
+; Load virtual function
+00007ffd`90957172 488b4030        mov     rax,qword ptr [rax+30h]
+; Restore stack and rsi, rdi
+00007ffd`90957176 4883c428        add     rsp,28h
+00007ffd`9095717a 5e              pop     rsi
+00007ffd`9095717b 5f              pop     rdi
+; Tail call virtual function (sum)
+00007ffd`9095717c 48ffe0          jmp     rax
+
+; Sum
+; Allocate stack (for checked addition?)
+00007ffd`909571a0 4883ec28        sub     rsp,28h
+; Load acc
+00007ffd`909571a4 488b4110        mov     rax,qword ptr [rcx+10h]
+; acc <- acc + v
+00007ffd`909571a8 4803c2          add     rax,rdx
+; Overflowed? (SeqComparer uses Checked additions)
+00007ffd`909571ab 700b            jo      00007ffd`909571b8
+; Store acc
+00007ffd`909571ad 48894110        mov     qword ptr [rcx+10h],rax
+; We like to continue
+00007ffd`909571b1 33c0            xor     eax,eax
+; Restore stack
+00007ffd`909571b3 4883c428        add     rsp,28h
+00007ffd`909571b7 c3              ret
+```
+
+There are a lot of similarities with `PushStream<'T>` so even though we haven't looked at the `SeqComposer` code we see that it does support push. `SeqComposer` is more advanced than `PushStream<'T>` in that it supports pull as well.
+
+The difference in performance between **PushStream** and **SeqComposer2** seems to come mostly from a more generic top-loop:
+
+`PushStream<'T>` has a specialized loop for `range`:
+
+```fsharp
+let rec rangeForward s e r i = if i <= e then if r i then rangeForward s e r (i + s)
+```
+
+For `SeqComposer` we use `Composer.init c id` to implement `range`:
+
+```fsharp
+while (outOfBand.HaltedIdx = 0) && (idx < terminatingIdx) do
+    if maybeSkipping then
+        maybeSkipping <- isSkipping ()
+
+    if not maybeSkipping then
+        consumer.ProcessNext (f (idx+1)) |> ignore
+
+    idx <- idx + 1
+```
+
+It seems the difference in performance mainly comes from that `SeqComposer` has 2 extra checks per value and an extra virtual call (`isSkipping ()` is not called in the pipeline above). `SeqComposer` also uses checked addition which adds a small overhead (a conditional branch and stack adjusting).
 
