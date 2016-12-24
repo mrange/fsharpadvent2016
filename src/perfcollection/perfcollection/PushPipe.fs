@@ -15,7 +15,7 @@
 // ----------------------------------------------------------------------------------------------
 module PushPipe
 
-type Receiver<'T>   = 'T    -> bool
+type Receiver<'T>   = 'T    -> byte
 type Resetter       = unit  -> unit
 type Finalizer<'T>  = unit  -> 'T
 
@@ -25,13 +25,19 @@ type Sink<'T, 'TInput>  = Receiver<'TInput>*Resetter*Finalizer<'T>
 module Pipe =
 
   module Internals =
+    [<Literal>]
+    let trueful           = 0x00uy
+    [<Literal>]
+    let falseful          = 0xFFuy
+    [<Literal>]
     let defaultSize       = 16
+
     let inline adapt s    = OptimizedClosures.FSharpFunc<_, _, _>.Adapt s
 
     module Loop =
-      let rec acceptArray (vs : 'T []) r i  = if i < vs.Length then r vs.[i] && acceptArray vs r (i + 1) else true
-      let rec acceptRangeForward s e r i    = if i <= e then r i && acceptRangeForward s e r (i + s) else true
-      let rec acceptRangeReverse s e r i    = if i >= e then r i && acceptRangeReverse s e r (i + s) else true
+      let rec acceptArray (vs : 'T []) r i  = if i < vs.Length then (if r vs.[i] = trueful then acceptArray vs r (i + 1) else trueful) else trueful
+      let rec acceptRangeForward s e r i    = if i <= e then (if r i = trueful then acceptRangeForward s e r (i + s) else trueful) else trueful
+      let rec acceptRangeReverse s e r i    = if i >= e then (if r i = trueful then acceptRangeForward s e r (i + s) else trueful) else trueful
 
   open Internals
   open System
@@ -53,6 +59,7 @@ module Pipe =
   [<GeneralizableValue>]
   let inline acceptRange<'T> : Pipe<int, int*int*int> =
     fun r (b,s,e) ->
+      System.Diagnostics.Debugger.Break ()
       if s = 0 then
         raise (ArgumentException ("Step of range can not be 0", "s"))
       elif b <= e && s > 0 then
@@ -60,12 +67,12 @@ module Pipe =
       elif e <= b && s < 0 then
         Loop.acceptRangeReverse s e r b
       else
-        true
+        trueful
 
   // pipes
 
   let inline filter (f : 'T -> bool) p : Pipe<'T, 'TInput> =
-    fun r -> p (fun v -> if f v then r v else true)
+    fun r -> p (fun v -> if f v then r v else trueful)
 
   let inline map (m : 'T -> 'U) p : Pipe<'U, 'TInput> =
     fun r -> p (fun v -> r (m v))
@@ -74,9 +81,9 @@ module Pipe =
 
   let inline toArray p : Sink<'T [], 'TInput> =
     let ra = ResizeArray defaultSize
-    (p (fun v -> ra.Add v; true), (fun () -> ra.Clear ()), fun () -> ra.ToArray ())
+    (p (fun v -> ra.Add v; trueful), (fun () -> ra.Clear ()), fun () -> ra.ToArray ())
 
   let inline sum p : Sink<'T, 'TInput> =
     let z = LanguagePrimitives.GenericZero
     let mutable acc = z
-    (p (fun v -> acc <- acc + v; true), (fun () -> acc <- z), fun () -> acc)
+    (p (fun v -> acc <- acc + v; trueful), (fun () -> acc <- z), fun () -> acc)
