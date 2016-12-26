@@ -9,6 +9,10 @@
   1. **New performance test** - Paul Westcott ([@manofstick](https://github.com/manofstick)) made me aware that SeqComposer has a more performant API. **SeqComposer2** uses this API.
 1. **2016-12-23**
   1. **Analysis of performance difference** - Added an appendix with an analysis to explain the performance difference between **Imperative** and **PushPipe**.
+1. **2016-12-24**
+  1. **New performance test** - **SeqComposer3** and **Nessos.Streams2** uses the pull over push to accumulate values.
+1. **2016-12-26**
+  1. **Restored labels** - The labels got lost in the performance graphs. Now restored.
 
 As F# developers we all know about **Seq** that allows us to transform data using pipelines:
 
@@ -24,15 +28,17 @@ let result =
 There are many competing data pipelines to chose from.
 
 0. **Imperative** - If we weren't F# developers we would use imperative patterns to implement the data pipeline
-1. **Seq** - Good old **Seq** from `FSharp.Core`
-2. **Linq** - **Linq** + some F# idiomatic wrappers is totally ok
-3. **[Nessos.Streams](https://github.com/nessos/streams)** - The gurus at *Nessos* created a data pipeline that supports push, pull, parallelism, cancelability and so on. It's also supposed to be really fast
-5. **[SeqComposer](https://github.com/Microsoft/visualfsharp/pull/1570)** - There's a PR in F# repository that intends to improve performance of **Seq**.
-6. **[SeqComposer2](https://github.com/Microsoft/visualfsharp/pull/1570)** - Paul Westcott ([@manofstick](https://github.com/manofstick)) made me aware that SeqComposer has a more performant API. **SeqComposer2** uses this API.
-7. **PullStream** - I implemented a simple pull (like **Seq**) data pipeline to compare against
-8. **PushStream** - I implemented a simple push (like supported by **Nessos.Streams**) data pipeline to compare against
-9. **PushPipe** - A variant of **PushStream** intended to reduce the overhead of creating data pipelines.
-10. **[Nessos.LinqOptimizer](https://github.com/nessos/LinqOptimizer)** - While **Nessos.Streams** is cool, compared to **Nessos.LinqOptimizer** it pales as the later optimizes the data pipeline when constructed to improve performance.
+0. **Seq** - Good old **Seq** from `FSharp.Core`
+0. **Linq** - **Linq** + some F# idiomatic wrappers is totally ok
+0. **[Nessos.Streams](https://github.com/nessos/streams)** - The gurus at *Nessos* created a data pipeline that supports push, pull, parallelism, cancelability and so on. It's also supposed to be really fast
+0. **[Nessos.Streams2](https://github.com/nessos/streams)** - **Nessos.Streams2** uses the pull over push to accumulate values.
+0. **[SeqComposer](https://github.com/Microsoft/visualfsharp/pull/1570)** - There's a PR in F# repository that intends to improve performance of **Seq**.
+0. **[SeqComposer2](https://github.com/Microsoft/visualfsharp/pull/1570)** - Paul Westcott ([@manofstick](https://github.com/manofstick)) made me aware that SeqComposer has a more performant API. **SeqComposer2** uses this API.
+0. **[SeqComposer3](https://github.com/Microsoft/visualfsharp/pull/1570)** - **SeqComposer3** uses the pull over push to accumulate values.
+0. **PullStream** - I implemented a simple pull (like **Seq**) data pipeline to compare against
+0. **PushStream** - I implemented a simple push (like supported by **Nessos.Streams**) data pipeline to compare against
+0. **PushPipe** - A variant of **PushStream** intended to reduce the overhead of creating data pipelines.
+0. **[Nessos.LinqOptimizer](https://github.com/nessos/LinqOptimizer)** - While **Nessos.Streams** is cool, compared to **Nessos.LinqOptimizer** it pales as the later optimizes the data pipeline when constructed to improve performance.
 
 I asked myself; *which data pipeline has the lowest overhead?*
 
@@ -55,11 +61,11 @@ So without further ado:
 
 ## Performance in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/ak73l7d.png)
+![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/GvT8uST.png)
 
 ## Collection Count - F# 4, .NET 4.6.2, x64
 
-![Collection Count - F# 4, .NET 4.6.2, x64](http://i.imgur.com/6Df3fS9.png)
+![Collection Count - F# 4, .NET 4.6.2, x64](http://i.imgur.com/IkHjAy9.png)
 
 ## Interpreting the results
 
