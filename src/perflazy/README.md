@@ -1,5 +1,7 @@
 # On the cost of being lazy
 
+*[Full source code can be found here](https://github.com/mrange/fsharpadvent2016/tree/master/src/perflazy)*
+
 Previously I have looked at performance of different [persistent hash maps](https://gist.github.com/mrange/d6e7415113ebfa52ccb660f4ce534dd4) and [data pipelines](https://gist.github.com/mrange/09ba6d7541468de49426eeb81a8b660c) in .NET. Now I wonder:
 
 *What is the cost of being lazy?*
