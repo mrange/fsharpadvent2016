@@ -54,7 +54,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop 0 0. 0 0
 
       simple
@@ -77,7 +77,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -112,7 +112,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -150,7 +150,57 @@
         else
           s
 
-      let simple () = 
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
+
+  module ExceptionAwareFlagPerf =
+    open System.Threading
+
+    type LazyState =
+      | HasValue
+      | HasException
+      | Delayed
+
+    type Lazy<'T>(f : unit -> 'T) =
+      let mutable state     = Delayed
+      let mutable value     = Unchecked.defaultof<'T>
+      let mutable exc       = Unchecked.defaultof<exn>
+
+      member x.Value =
+        match state with
+        | HasValue      -> value
+        | HasException  -> raise exc
+        | Delayed       ->
+          try
+            value <- f ()
+            state <- HasValue
+            value
+          with
+          | e ->
+            exc <- e
+            state <- HasException
+            reraise ()
+
+    let inline delay i              = Lazy<_> (fun () -> i)
+    let inline value (l : Lazy<_>)  = l.Value
+
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -189,7 +239,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -230,7 +280,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -275,7 +325,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -299,7 +349,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -324,7 +374,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -349,7 +399,7 @@
         else
           s
 
-      let simple () = 
+      let simple () =
         simpleLoop (delay 0) 0. 0 0
 
       simple
@@ -384,6 +434,7 @@
         "Lazy (None)"                     , LazyNoProtectionPerf.createTestCases
         "Flag (Trivial)"                  , TrivialFlagPerf.createTestCases
         "Flag (Compact)"                  , CompactFlagPerf.createTestCases
+        "Flag (Exception aware)"          , ExceptionAwareFlagPerf.createTestCases
         "Flag (Protected)"                , ProtectedFlagPerf.createTestCases
         "Flag (Full protection)"          , FullProtectionFlagPerf.createTestCases
         "Flag (Full protection w. DC)"    , FullProtectionFlag2Perf.createTestCases
@@ -445,7 +496,7 @@
 open System
 
 [<EntryPoint>]
-let main argv = 
+let main argv =
   try
     Environment.CurrentDirectory <- AppDomain.CurrentDomain.BaseDirectory
     PerformanceTests.run ()

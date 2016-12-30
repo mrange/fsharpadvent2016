@@ -50,16 +50,17 @@ These are the alternatives I selected:
 0. **lazy**                            - Uses `F#` lazy
 0. **Lazy (Execution & Publication)**  - `F#` internally uses .NET `Lazy<'T>` with Execution & Publication protection so we expect the performance to be identical.
 0. **Lazy (Publication)**              - Same as above but here we only uses publication protection. That means that the computation might be carried out by several threads but only one of the results are cached. There subtleties that I haven't dug into yet on whether all threads will see the same instance or not?
-0. **Lazy (None)**                     - No thread safety, if multiple threads are executing behavior is undefined. Doesn't cache exceptions.
-0. **Flag (Trivial)**                  - A lazy implementation using a simple unprotected boolean to decide whether a value is computed or not. Doesn't cache exceptions.
+0. **Lazy (None)**                     - No thread safety, if multiple threads are dereferencing the lazy value the behavior is undefined.
+0. **Flag (Trivial)**                  - A lazy implementation using a simple unprotected flag to decide whether a value is computed or not. Doesn't cache exceptions.
 0. **Flag (Compact)**                  - A lazy implementation letting the value act both value and flag. Doesn't cache exceptions.
+0. **Flag (Exception aware)**           - A lazy implementation using a simple unprotected flag to decide whether a value is computed or not. Does cache exceptions.
 0. **Flag (Protected)**                - A lazy implementation that uses a simple publication protection scheme. Unfortunately so simple that different threads might see different instances. Doesn't cache exceptions.
 0. **Flag (Full protection)**          - A lazy implementation that uses `Monitor` to achieve Execution & Publication protection. Doesn't cache exceptions.
 0. **Flag (Full protection w. DC)**    - A lazy implementation that uses `Monitor` to achieve Execution & Publication protection and Double Check pattern to reduce cost of reading a cached value. Doesn't cache exceptions.
 
 ## Performance in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/QSue3uT.png)
+![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/vrzBoNm.png)
 
 As expected **no lazy** is the fastest overall (because the computation is very cheap).
 
@@ -75,7 +76,7 @@ In all these cases we have no contention of the locks so the performance will lo
 
 ## Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/KIDxuyZ.png)
+![Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/XcTkKv3.png)
 
 Collection count gives an indication on the number of objects allocated by the lazy implementations. Lower is better.
 
@@ -87,7 +88,7 @@ All flag implementations except **Flag Compact** incurs the same overhead where 
 
 Is it a problem that for `lazy` at `100%` the overhead is large? Isn't it so that in most realistic cases the ratio will be closer to `0%` than `100%`. In at least one case the opposite is true, consider [`Seq.upto`](https://github.com/Microsoft/visualfsharp/blob/master/src/fsharp/FSharp.Core/seq.fs#L274). It turns out `Seq.upto` uses `Lazy<_>` to cache the current value (or exception). Normally the current value is accessed just once and then the next value is computed. That means in this case the ratio is closer to `100%` and then incurs a large overhead if the computation is cheap. During my comparison of data pipelines in .NET this turned out to be the source of most of the overhead of `Seq` over other pipelines.
 
-Personally, I am sceptical of mutally exclusive regions of code (like `Monitor.Enter`/`Monitor.Exit`). One of my reasons for this is the dreaded priority inversion. Now on `Windows` and non real-time `Linux` this isn't much of a problem in general but when working with real-time system priority version is real problem. In addition, the real-time distributions of `Linux` I had the pleasure of working with had severe problems in the futex implementation which meant that a futex could lock-out a different process (!) if we are unlucky. So by avoiding mutually exclusive regions we avoid these problems.
+Personally, I am sceptical of mutually exclusive regions of code (like `Monitor.Enter`/`Monitor.Exit`). One of my reasons for this is the dreaded priority inversion. Now on `Windows` and non real-time `Linux` this isn't much of a problem in general but when working with real-time system priority version is real problem. In addition, the real-time distributions of `Linux` I had the pleasure of working with had severe problems in the futex implementation which meant that a futex could lock-out a different process (!) if we are unlucky. So by avoiding mutually exclusive regions we avoid these problems.
 
 On the other hand, implementing thread-safe code without mutually exclusive regions is really hard as it requires whole different understanding of how the compiler, jitter CPU, cache and memory system rewrites your code in order to speed it up. Basically, reads are scheduled earlier and writes are delayed. Reads & writes that are deemed unnecessary may be eliminated. These rewrites works brilliantly in a **non-concurrent** environment. In a **concurrent** the rewrites makes it impossible for you to look at the code and deduce what happens (because this is not the program that is being executed). Because of this the simple [double-check locking](https://en.wikipedia.org/wiki/Double-checked_locking) is actually quite hard to implement. Mutually exclusive regions restores sanity but as mentioned above has their own problem.
 
