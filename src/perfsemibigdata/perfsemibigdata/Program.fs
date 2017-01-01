@@ -424,18 +424,17 @@
         let mutable selection = Selection.A
 
         let rec loop globalAcceleration (a : Vector []) (b : Vector []) i =
-          if i < count then
-            b.[i] <- verlet a.[i] b.[i] globalAcceleration
-            loop globalAcceleration a b (i + 1)
+          b.[i] <- verlet a.[i] b.[i] globalAcceleration
+          if i > 0 then loop globalAcceleration a b (i - 1)
 
         member x.Verlet globalAcceleration =
           selection <-
             match selection with
             | Selection.A ->
-              loop globalAcceleration positionsA positionsB 0
+              loop globalAcceleration positionsA positionsB (count - 1)
               Selection.B
             | Selection.B ->
-              loop globalAcceleration positionsB positionsA 0
+              loop globalAcceleration positionsB positionsA (count - 1)
               Selection.A
 
         member x.Positions =
@@ -488,21 +487,20 @@
         let mutable selection = Selection.A
 
         let rec loop globalAcceleration (a : Vector3 []) (b : Vector3 []) i =
-          if i < count then
-            let current   =   a.[i]
-            let previous  =   b.[i]
-            let next      =   current + current - previous + globalAcceleration
-            b.[i]         <-  next
-            loop globalAcceleration a b (i + 1)
+          let current   =   a.[i]
+          let previous  =   b.[i]
+          let next      =   current + current - previous + globalAcceleration
+          b.[i]         <-  next
+          if i > 0 then loop globalAcceleration a b (i - 1)
 
         member x.Verlet globalAcceleration =
           selection <-
             match selection with
             | Selection.A ->
-              loop globalAcceleration positionsA positionsB 0
+              loop globalAcceleration positionsA positionsB (count - 1)
               Selection.B
             | Selection.B ->
-              loop globalAcceleration positionsB positionsA 0
+              loop globalAcceleration positionsB positionsA (count - 1)
               Selection.A
 
         member x.Positions =
