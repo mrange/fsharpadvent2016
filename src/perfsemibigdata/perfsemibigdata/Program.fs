@@ -376,7 +376,7 @@
 
       verlet, shuffledVerlet
 
-  module StructuresOfArrays2Perf =
+  module StructuresOfArraysSIMDPerf =
     open System.Numerics
 
     let toVector3 (v : Vector) = Vector3 (float32 v.X, float32 v.Y, float32 v.Z)
@@ -484,7 +484,7 @@
         "Struct"                      , StructPerf.createTestCases
         "Hot & Cold"                  , HotAndColdPerf.createTestCases
         "Structures of Arrays"        , StructuresOfArraysPerf.createTestCases
-        "Structures of Arrays (SIMD)" , StructuresOfArrays2Perf.createTestCases
+        "Structures of Arrays (SIMD)" , StructuresOfArraysSIMDPerf.createTestCases
       |]
 
     let random = Random.create 19740531
