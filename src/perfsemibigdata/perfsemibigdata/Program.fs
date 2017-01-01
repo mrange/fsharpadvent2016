@@ -94,6 +94,12 @@
       static member Zero = Vector (0., 0., 0.)
     end
 
+  let inline verlet (current : Vector) (previous : Vector) (globalAcceleration : Vector) : Vector =
+    let x = current.X + current.X - previous.X + globalAcceleration.X
+    let y = current.Y + current.Y - previous.Y + globalAcceleration.Y
+    let z = current.Z + current.Y - previous.Z + globalAcceleration.Z
+    Vector (x, y, z)
+
   type InitParticle =
     {
       Mass      : float
@@ -191,7 +197,6 @@
     let createTestCases initParticles shuffle =
       let map               = Array.map (fun (ip : InitParticle) -> Particle.New timeStep ip.Mass ip.Position ip.Velocity)
       let particles         = map initParticles
-      let shuffledParticles = Random.shuffleWith shuffle particles
 
       let rec verletLoop (particles : Particle []) globalAcceleration i =
         if i < particles.Length then
@@ -207,9 +212,29 @@
 #else
       let verlet ()         = verletLoop particles          globalAcceleration 0
 #endif
-      let shuffledVerlet () = verletLoop shuffledParticles  globalAcceleration 0
+      verlet
 
-      verlet, shuffledVerlet
+  module ClassShufflePerf =
+    let createTestCases initParticles shuffle =
+      let map               = Array.map (fun (ip : InitParticle) -> ClassPerf.Particle.New timeStep ip.Mass ip.Position ip.Velocity)
+      let particles         = map initParticles
+      let particles         = Random.shuffleWith shuffle particles
+
+      let rec verletLoop (particles : ClassPerf.Particle []) globalAcceleration i =
+        if i < particles.Length then
+          particles.[i].Verlet globalAcceleration
+          verletLoop particles globalAcceleration (i + 1)
+
+#if DEBUG
+      let verlet ()         =
+        let previous  = particles |> debugSumBy (fun p -> p.Position)
+        verletLoop particles globalAcceleration 0
+        let current   = particles |> debugSumBy (fun p -> p.Position)
+        previous, current
+#else
+      let verlet ()         = verletLoop particles          globalAcceleration 0
+#endif
+      verlet
 
   module StructPerf =
     [<NoComparison>]
@@ -242,7 +267,6 @@
     let createTestCases initParticles shuffle =
       let map               = Array.map (fun (ip : InitParticle) -> Particle.New timeStep ip.Mass ip.Position ip.Velocity)
       let particles         = map initParticles
-      let shuffledParticles = Random.shuffleWith shuffle particles
 
       let rec verletLoop (particles : Particle []) globalAcceleration i =
         if i < particles.Length then
@@ -258,9 +282,29 @@
 #else
       let verlet ()         = verletLoop particles          globalAcceleration 0
 #endif
-      let shuffledVerlet () = verletLoop shuffledParticles  globalAcceleration 0
+      verlet
 
-      verlet, shuffledVerlet
+  module StructShufflePerf =
+    let createTestCases initParticles shuffle =
+      let map               = Array.map (fun (ip : InitParticle) -> StructPerf.Particle.New timeStep ip.Mass ip.Position ip.Velocity)
+      let particles         = map initParticles
+      let particles         = Random.shuffleWith shuffle particles
+
+      let rec verletLoop (particles : StructPerf.Particle []) globalAcceleration i =
+        if i < particles.Length then
+          particles.[i].Verlet globalAcceleration
+          verletLoop particles globalAcceleration (i + 1)
+
+#if DEBUG
+      let verlet ()         =
+        let previous  = particles |> debugSumBy (fun p -> p.Position)
+        verletLoop particles globalAcceleration 0
+        let current   = particles |> debugSumBy (fun p -> p.Position)
+        previous, current
+#else
+      let verlet ()         = verletLoop particles          globalAcceleration 0
+#endif
+      verlet
 
   module HotAndColdPerf =
     [<NoComparison>]
@@ -292,7 +336,6 @@
     let createTestCases initParticles shuffle =
       let map               = Array.map (fun (ip : InitParticle) -> Particle.New timeStep ip.Mass ip.Position ip.Velocity)
       let particles         = map initParticles
-      let shuffledParticles = Random.shuffleWith shuffle particles
       let coldDatum         = Array.create initParticles.Length (ColdData ())
 
       let rec verletLoop (particles : Particle []) coldDatum globalAcceleration i =
@@ -309,9 +352,55 @@
 #else
       let verlet ()         = verletLoop particles         coldDatum globalAcceleration 0
 #endif
-      let shuffledVerlet () = verletLoop shuffledParticles coldDatum globalAcceleration 0
+      verlet
 
-      verlet, shuffledVerlet
+  module HotAndCold2Perf =
+    [<NoComparison>]
+    [<NoEquality>]
+    type Particle =
+      struct
+        val mutable mass      : float
+        val mutable current   : Vector
+        val mutable previous  : Vector
+        val mutable hot       : HotData
+
+        new (mass, current, previous) = { mass = mass; current = current; previous = previous; hot = HotData(); }
+
+        member x.Mass     = x.mass
+        member x.Position = x.current
+
+        member x.Verlet globalAcceleration =
+          let next    =  verlet x.current x.previous globalAcceleration
+          x.previous  <- x.current
+          x.current   <- next
+
+        static member New timeStep mass position velocity =
+          let current   = position
+          let previous  = position - (timeStep * (velocity : Vector))
+          Particle (mass, current, previous)
+
+      end
+
+    let createTestCases initParticles shuffle =
+      let map               = Array.map (fun (ip : InitParticle) -> Particle.New timeStep ip.Mass ip.Position ip.Velocity)
+      let particles         = map initParticles
+      let coldDatum         = Array.create initParticles.Length (ColdData ())
+
+      let rec verletLoop (particles : Particle []) coldDatum globalAcceleration i =
+        if i < particles.Length then
+          particles.[i].Verlet globalAcceleration
+          verletLoop particles coldDatum globalAcceleration (i + 1)
+
+#if DEBUG
+      let verlet ()         =
+        let previous  = particles |> debugSumBy (fun p -> p.Position)
+        verletLoop particles coldDatum globalAcceleration 0
+        let current   = particles |> debugSumBy (fun p -> p.Position)
+        previous, current
+#else
+      let verlet ()         = verletLoop particles         coldDatum globalAcceleration 0
+#endif
+      verlet
 
   module StructuresOfArraysPerf =
     type Selection =
@@ -336,10 +425,7 @@
 
         let rec loop globalAcceleration (a : Vector []) (b : Vector []) i =
           if i < count then
-            let current   =   a.[i]
-            let previous  =   b.[i]
-            let next      =   current + current - previous + globalAcceleration
-            b.[i]         <-  next
+            b.[i] <- verlet a.[i] b.[i] globalAcceleration
             loop globalAcceleration a b (i + 1)
 
         member x.Verlet globalAcceleration =
@@ -361,7 +447,6 @@
 
     let createTestCases initParticles shuffle =
       let particles         = Particles (timeStep, initParticles)
-      let shuffledParticles = particles // TODO: Shuffle
 
 #if DEBUG
       let verlet ()         =
@@ -372,9 +457,7 @@
 #else
       let verlet ()         = particles.Verlet          globalAcceleration
 #endif
-      let shuffledVerlet () = shuffledParticles.Verlet  globalAcceleration
-
-      verlet, shuffledVerlet
+      verlet
 
   module StructuresOfArraysSIMDPerf =
     open System.Numerics
@@ -431,7 +514,6 @@
 
     let createTestCases initParticles shuffle =
       let particles         = Particles (timeStep, initParticles)
-      let shuffledParticles = particles // TODO: Shuffle
 
 #if DEBUG
       let verlet ()         =
@@ -442,9 +524,7 @@
 #else
       let verlet ()         = particles.Verlet          globalAcceleration
 #endif
-      let shuffledVerlet () = shuffledParticles.Verlet  globalAcceleration
-
-      verlet, shuffledVerlet
+      verlet
 
   let run () =
 #if DEBUG
@@ -471,7 +551,7 @@
           a 100000
         |]
 *)
-      let samples = 50
+      let samples = 100
       let minimum = 100
       let maximum = 1000000
       let exp     = Math.Pow (float (maximum / minimum), 1. / float (samples - 1))
@@ -480,11 +560,14 @@
 
     let testCases =
       [|
-        "Class"                       , ClassPerf.createTestCases
-        "Struct"                      , StructPerf.createTestCases
-        "Hot & Cold"                  , HotAndColdPerf.createTestCases
-        "Structures of Arrays"        , StructuresOfArraysPerf.createTestCases
-        "Structures of Arrays (SIMD)" , StructuresOfArraysSIMDPerf.createTestCases
+        "Class"                             , ClassPerf.createTestCases
+        "Class (Shuffle)"                   , ClassShufflePerf.createTestCases
+        "Struct"                            , StructPerf.createTestCases
+        "Struct (Shuffle)"                  , StructShufflePerf.createTestCases
+        "Hot & Cold"                        , HotAndColdPerf.createTestCases
+        "Hot & Cold (No algebra)"           , HotAndCold2Perf.createTestCases
+        "Structures of Arrays"              , StructuresOfArraysPerf.createTestCases
+        "Structures of Arrays (SIMD)"       , StructuresOfArraysSIMDPerf.createTestCases
       |]
 
     let random = Random.create 19740531
@@ -511,10 +594,9 @@
           printfn "      = %A" v
 
         printfn "    Creating test cases"
-        let verlet, shuffledVerlet = creator initParticles shuffle
+        let verlet = creator initParticles shuffle
 
         result "Verlet"           verlet
-        result "Verlet(Shuffled)" shuffledVerlet
 
     let results = results.ToArray ()
 
