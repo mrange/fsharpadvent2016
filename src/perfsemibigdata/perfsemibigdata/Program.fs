@@ -461,7 +461,8 @@
   module StructuresOfArraysSIMDPerf =
     open System.Numerics
 
-    let toVector3 (v : Vector) = Vector3 (float32 v.X, float32 v.Y, float32 v.Z)
+    let toVector3 (v : Vector)  = Vector3 (float32 v.X, float32 v.Y, float32 v.Z)
+    let toVector  (v : Vector3) = Vector  (float   v.X, float   v.Y, float   v.Z)
 
     let timeStep            = Vector3 (float32 timeStep)
     let globalAcceleration  = toVector3 globalAcceleration
@@ -518,7 +519,7 @@
         let previous = particles.Positions |> debugSumBy id
         particles.Verlet globalAcceleration
         let current  = particles.Positions |> debugSumBy id
-        previous, current
+        toVector previous, toVector current
 #else
       let verlet ()         = particles.Verlet          globalAcceleration
 #endif
