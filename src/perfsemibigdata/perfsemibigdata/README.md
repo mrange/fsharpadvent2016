@@ -1,32 +1,42 @@
 # On the topic of data locality
 
-It is well-known that a harddisk has a pretty long latency from that we request the data to that we get the data. Usually we measure the harddisk latency in milliseconds which is an eternity for a CPU. The bandwidth of a harddisk is pretty good though as SSD:s today can reach 1 GiB/second.
+It is well-known that a hard disk has a long delay from that we request the data to that we get the data. Usually we measure the hard disk latency in milliseconds which is an eternity for a CPU. The bandwidth of a hard disk is decent good as SSD:s today can reach 1 GiB/second.
 
-What is less known is that RAM has the same characteristics, really bad latency but good bandwidth.
+What is less known is that RAM has the same characteristics, bad latency with good bandwidth.
 
-The RAM latency for my machine under semi-high load is ~120 ns (measured using the wonderful program [Intel® Memory Latency Checker](https://software.intel.com/en-us/articles/intelr-memory-latency-checker)). This means that the CPU on my machine has to wait for ~400 cycles for data from RAM.
+You can measure RAM latency and badndwidth using [Intel® Memory Latency Checker](https://software.intel.com/en-us/articles/intelr-memory-latency-checker). On my machine the RAM latency under semi-high load is ~120 ns (The `3r:1w` bandwidth is 16GiB/second). This means that the CPU on my machine has to wait for ~400 cycles for data, an eternity.
 
-Therefore over the years CPU:s has accumulated more and more cache as well as advanced techniques to schedule reads earlier and delaying writes to avoid starving for data. So much in fact that only ~1% of the CPU die is used for computation and the rest is used to fix the problem of slow RAM.
+To "fix" the latency problem over the years CPUs has accumulated more and more cache as well as advanced techniques to schedule reads earlier and delaying writes to avoid starving for data. So much in fact that only ~1% of the CPU die is used for computation and the rest is used to fix the problem of slow RAM. In addition, because bandwidth is good and latency is poor CPUs reads more data than what the CPU requested (prefetching).
 
-In order to write high-performant code that process a lot of data we have to read data sequentially from RAM (just as we would have to from harddisk) as this allows the CPU to efficiently prefetch data for us.
+The CPU on my machine has 3 layers of cache:
+
+```
+L1: 256KiB
+L2: 1MiB
+L3: 6MiB (shared for all cores)
+```
+
+A simple way of thinking about the cost of reading data is that if reading from L1 has the cost of `1`, the cost of reading from L2 is `10`, the cost of reading from L3 is `100` and the cost of reading from RAM is `1000`.
+
+When we need to write highly performant code that process a lot of data we want to minimize the foot-print of the data to ensure as much as possible fits into the `L1` cache and that we uses the band-width as efficiently as possible. Because of the prefetcher we should read data sequentially.
 
 ## What is a lot of data?
 
-On my machine the L1 cache is 256KiB which means if the data fits into 256KiB we don't have to think. L2 is 1MiB and L3 is 6MiB. So if my data is more than 6MiB I probably should start thinking on accessing the data sequentially if I care about performance.
-
-One of the fundamental principles of .NET and Java is that memory is managed. .NET prevents developers from unintentionally corrupting data and has a GC that can defragment the heap for us. .NET also hides the location of the memory for us as it's not important for the correctness of a program. The problem is that the location is very important for us when it comes to writing performant code that process a lot of data.
+What lot of data means depends on the context. Sometimes it's 16KiB, sometimes it's 16TiB but as the L3 cache on my machine is 6MiB any data set bigger than 6MiB is considered "big" in my examples.
 
 ## How do we make sure we read the data sequentially?
 
-One of the simplest ways to access data sequentially is to use arrays. Arrays are a continous block of memory, if we traverse it from `0..last` we access the array data sequentially.
+One of the fundamental principles of .NET (and Java) is that memory is managed. .NET prevents developers from unintentionally corrupting data and has a GC that can defragment the heap for us. .NET also hides the location of the memory for us as it's not important for the correctness of a program. The location is important when we need to ensure we access memory sequentially for performance.
 
-A bit of a snag is in .NET the actual data in an array is often a reference to an object which may or may not lay sequential in memory. The GC tries to preserve the order of the objects in the way they were created but it's not certain that correlates to how you will access the data.
+One of the simplest ways to access data sequentially is to use arrays. Arrays are a continuous block of memory, if we traverse it from `0..last` we access the array data sequentially.
+
+The actual data in an array is often a reference to an object which may or may not lay sequential in memory. The GC tries to preserve the order of the objects in the way they were created but it's not certain that correlates to how you will access the data.
 
 .NET allows us to create arrays of `struct`. A `struct` in .NET is a value object which means that when we iterate an array of `struct` we are indeed accessing the data sequentially.
 
 ## Measuring the cost of data access
 
-In order to measure different data access schemes I have created a few test cases that uses various patterns to access data.
+In order to measure different data access schemes, I have created a few test cases that uses various patterns to access data.
 
 The basic premise that we have a large set of particles that contain:
 
@@ -36,7 +46,7 @@ The basic premise that we have a large set of particles that contain:
 4. Hot Data (data that would be accessed often)
 5. Cold Data (data that would be accessed seldom)
 
-We will perform something called verlet integration over all particles which is a common in game physics. It's a very simple computation
+We will perform something called verlet integration over all particles, this is common in game physics. It's a very simple computation
 
 ```fsharp
   let newPos  =  currentPos + currentPos - previousPos + globalAcceleration
@@ -44,11 +54,11 @@ We will perform something called verlet integration over all particles which is 
   currentPos  <- newPos
 ```
 
-This computation only access current and previous position and doesn't look at neither the hot data or the cold data which is common for these kind of algorithms.
+This computation only access current and previous position and doesn't look at neither the hot data or the cold data.
 
 We obviously like the verlet integration to be as fast as possible.
 
-With the mass, current and previous position, hot data and cold data a particle takes approximately 200 bytes. We will have up to 1,000,0000 particles which means the particles will take approximately 200,000,0000 bytes which is way more than my 6MiB of L3 cache. Therefore we expect that the way we access data will have an impact.
+With the mass, current and previous position, hot data and cold data a particle takes 216 bytes. We will have up to 1,000,000 particles which means the particles will take 216,000,0000 bytes which is way more than my 6MiB of L3 cache. Therefore we expect that the way we access data will have an impact.
 
 ### The `Particle` class
 
@@ -85,10 +95,10 @@ For the  test cases **Class** and **Class (Shuffle)** we create a `Particle` cla
 
 We then create two arrays.
 
-1. In the first array all objects are stored in the order they are created which mean the particles will be sequential in memory when we iterate the array
-2. In the second array we shuffle the order of the objects in order to simulate a situation where we for some reason don't access the objects in the order they were created. *Note: if you store particles in a dictionary and iterate it the order is effectively random*
+1. For test case **Class** we iterate over the first array where all object references in the order the objects were created. This mean we access the particle data sequentially when we iterate the array.
+2. For test **Class (Shuffle)** we iterate over the second array where all object references are randomly shuffled. This mean we access the particle data randomly when we iterate the array.*Note: if you store particles in a dictionary and iterate it the order is effectively random as well*
 
-For small sets of data we expect no difference in performance when iterating the arrays but what about larger sets?
+For small sets of data we expect no difference in performance when iterating the arrays as the data fits into L1. When the data sets grow we are expecting **Class** to perform better because we make better use of the prefetcher.
 
 ### The `Particle` struct
 
@@ -127,9 +137,9 @@ The only difference is that we use `struct` over `class`. We create two arrays l
 
 ### Separate Hot & Cold data
 
-In the test case **Hot & Cold** we have split the data in two parts, hot and cold. In our fictious program we have identified hot data (data that is accessed often) and grouped together, cold data is put into a different group. For this particular algorithm we only need to access the hot data.
+For test case **Hot & Cold** in our fictitious program we have identified hot data (data that is accessed often) that is grouped together, cold data (accessed more seldomly) is put into a different group. For this particular algorithm we only need to access the hot data.
 
-This is common approach make sure we don't waste memory bandwidth on loading cold data which we don't access during verlet integration. We still have some overhead as there are hot data the verlet interation doesn't accessed but that may be accessed later during constraint relaxation.
+This is common approach to make sure we don't waste memory bandwidth on loading cold data which we don't access during verlet integration. We still have some overhead as there are hot data the verlet interation doesn't need but that are needed for the constraint relaxation.
 
 It looks like this:
 
@@ -200,7 +210,7 @@ When analyzing the jitted assembly code I found several inefficiencies like this
 
 Overall there seems to be lots of roundtrips to and from invisible local variables that cost precious cycles as well as making the jitted code harder to understand.
 
-I don't understand exactly why this is so but I suspect the jitter guarantees some invariants this way, if the jitter was more advanced or had more CPU time available to it it should be able to eliminate the local variables.
+I don't understand exactly why this is so but I suspect the jitter struggles to establish a holistic view that allows it to eliminate the intermediate results from each operation and therefore stores the results as invisible local variables to be sure. If the jitter was more advanced or had more CPU time available to it it should be able to eliminate the intermediate results.
 
 To address this so in the test case **Hot & Cold (No Algebra)** I know longer rely on Vector algebra but instead implement a helper function like this for the verlet integration:
 
@@ -212,7 +222,9 @@ To address this so in the test case **Hot & Cold (No Algebra)** I know longer re
     Vector (x, y, z)
 ```
 
-This function triplicate the logic but now it only rely on float algebra. Floats are well-known to the jitter and it might be able to eliminate local variables better in this case.
+This function triplicate the logic but now only rely on float algebra. Floats are well-known to the jitter and it might be able to eliminate local variables better in this case.
+
+Let's have a look:
 
 ```asm
 ; Load ea for current into r8
@@ -248,13 +260,17 @@ This function triplicate the logic but now it only rely on float algebra. Floats
 00007ffb`8aa2472c f20f114a10      movsd   mmword ptr [rdx+10h],xmm1
 ```
 
-It looks much better and test case **Hot & Cold (No algebra)** should perform better thanks to this.
+It looks much better as we don't see writes of intermediate results. In addition this is the full verlet computation, before we only had the initial steps of the computation in about the same number of lines.
+
+The test case **Hot & Cold (No algebra)** should perform better thanks to this.
 
 ### Using `Structures of Arrays` over `Arrays of Structures`
 
 Typically we create a class/struct and from that create an array that we iterate. This is somewhat comparable to `Row-Stores` in databases. Each row/array entry holds a full object. Many databases also supports `Column-Stores` as this is more efficient if you have lots of properties in an object but only accesses a few of them (like during report generation). We can apply the same approach to objects in memory which is called `Structures of Arrays (SOA)`. What we normally do is called `Arrays of Structures (AOS)`.
 
-We implement it as this:
+This will give a near optimal usage of cache and band-width but we get extra overhead because we will need to dereferenc several arrays for each computation.
+
+For test case **Structures of Arrays** we implement it as this:
 
 ```fsharp
     type Selection =
@@ -299,9 +315,9 @@ We implement it as this:
       end
 ```
 
-The idea is that mass, currentPosition and nextPosition properties are stored as arrays. The `this` pointer for a particle object is then the index in the arrays.
+So instead of having a `Particle` class we now have a class `Particles` that manages all particles. The idea is that mass, currentPosition and nextPosition properties are stored as arrays. A "`this`" pointer for a particle object is  the index into the arrays.
 
-In addition the example avoids copying floats by letting positionsA and positionsB switch the roles of currentPosition and nextPosition.
+In addition, the example avoids copying floats by letting positionsA and positionsB switch the roles of currentPosition and nextPosition.
 
 Another small optimization is to loop towards 0 as this saves a register which saves us loading the length from the stack if we run out of registers. The prefetcher fetches both before and after the address we accessed so it gives no negative impact on performance.
 
@@ -326,7 +342,7 @@ For tight loops this can make a difference. I suspect this is due to how tail re
 
 ### `Structures of Arrays` with .NET 4.6 SIMD
 
-In .NET 4.6 we got SIMD enabled data structures like `System.Numerics.Vector3`. This should give a performance improvement. An issue with .NET 4.6 SIMD is that `System.Numerics.Vector3` only supports single precision floats. This divides the size of the test data by two so it's not a fair comparison. However, I thought it could be interesting to include anyway:
+In .NET 4.6 we got SIMD enabled data structures like `System.Numerics.Vector3`. This should give a performance improvement. An issue with .NET 4.6 SIMD is that `System.Numerics.Vector3` only supports single precision floats. This divides the size of the test data by two so it's not a fair comparison. However, I thought it could be interesting to include anyway so I added test case **Structures of Arrays (SIMD)**.
 
 Since the jitter recognizes the SIMD types we can use vector algebra and avoid lot hidden local variables in the jitted code:
 
@@ -392,45 +408,53 @@ These are the different test cases we like to measure:
 
 ![Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/yMhzGG1.png)
 
-We clearly see that **Class (Shuffle)** degrades a lot compared to the alternatives. This is because that when the data no longer fits into the L3 cache **and** we access the data randomly we starve the CPU for data.
+We clearly see that **Class (Shuffle)** degrades a lot compared to the alternatives. This is because when the data no longer fits into the L3 cache **and** we access the data randomly we get no benefit of the prefetcher and the CPU has to wait a long time for data. We also see that the **Class (Shuffle)** starts degrading in several steps. This is because there is prefetching between L1, L2 and L3 as well.
 
 In no other cases shuffling seems to effect performance negatively as expected.
 
 **Class**, **Struct** and **Struct (Shuffle)** degrades somewhat when we run out of L3 cache but because of prefetching it never gets as bad as **Class (Shuffle)**.
 
-**Hot & Cold** (both variants) does a lot better because even though it also eventually runs out L3 cache because we only fetch hot data we make it easier for the prefetcher to stay ahead of us.
+**Hot & Cold** (both variants) don't seem to degrade even though we run out L3 cache. This is because the prefetcher manages to stay ahead of the CPU.
 
-**Structures of Arrays** (both variants) does the best for all sizes as it seems updating the arrays is faster than the updating fields. This is a surprising result as I was expecting `SOA` to do worse for small data sets but then outpace at bigger data sets. I will need to look at the jitted assembly code to understand this.
+**Hot & Cold (No Algebra)** does better because we managed to eliminate writes of intermediate results by refactoring the code.
+
+**Structures of Arrays** (both variants) does the best. As **Hot & Cold** doesn't degrade due to data starvation it sholdn't be because of more efficient use band-width. Instead, it's mainly because the way the code is written we avoid a method call for each particle. When we are calling a method we first marshalls the input arguments and then the method unmarshalls them. As the verlet computation is quite cheap the method call itself is taking some time.
+
+**Structures of Arrays (SIMD)** is the fastest alternative which we were expecting.
 
 In order to easier estimate the order on how the performance depend on the data size I provide a chart where x-axis and y-axis is logarithmic
 
-![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/rXp40Kw.png)
+![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/Xim9A9Q.png)
 
 For **Class (Shuffle)** one sees three plateaus in the test data that are delimited by a linear growth of performance (as the axes are both logarithmic).
 
-I have mark the three plateaus with `L1`, `L2` and `L3` with the assumption that for **Class (Shuffle)** this is when the data is able to fit inside the different layers of cache.
+I have marked the three plateaus with `A`, `B` and `C`.
+
+An explaination for the three plateaus could be that the `A` plateau is when the data fits into `L1` cache. For plateau `B` the data still fit into `L2` but because `L2` is slower the performance degrades somewhat. `C` plateau then matches `L3` cache.
 
 As nice explaination as this is it doesn't match the input data.
 
-Consider plateau `L2`. It starts at 256 particles and end at 1389 particles. Since the size of a particle reported by .NET is 216 bytes (also matches manual estimate) that would mean the L1 runs out at 54KiB and L2 runs out at 292KiB but that doesn't match the numbers for my machine. In addition, plateau `L3` ends at 1920KiB.
+Consider plateau `B`. It starts at 210 particles and end at 1485 particles. Since the size of a particle reported by .NET is 216 bytes (also matches manual estimate) that would mean the `A` runs out at 44KiB and `B` runs out at 313KiB but that doesn't match the numbers for my machine. In addition, plateau `A` ends at 1830KiB.
 
-The plateaus are interesting but currently the numbers don't add up for me.
+The plateaus are interesting but I don't know how to correctly interpret them at this point.
+
+Finally, it seems that the performance for **Class (Shuffle)** asymptotically goes towards 1200 ms. As it starts at 200ms it means that the memory latency overhead is 1 second. We are processing 10,000,000 particles that means that the latency per particle is 100 ns which is quite close to the 120 ns reported by Intel® Memory Latency Checker tool.
 
 ## Conclusions
 
-To be honest most developers don't need top-notch performance, most are happy with decent performance. However, I know that there are a few out there that needs to process a lot of data in a short amount of time.
+To be honest most developers don't need top-notch CPU performance, most are happy with decent CPU performance. However, I know that there are a few out there that needs to process a lot of data in a short amount of time.
 
 For those guys it's very important to minimize the size of the data (in order to fit as much in cache as possible) as well as making sure to access the data sequentially (to make efficient use of the prefetcher).
 
 A managed language environment like .NET and Java doesn't allow direct control of the memory layout of objects but since the GC tries to maintain the order the objects were created as long as we allocate them in one go (to avoid hole in the allocations) and access them in that order we make good use of the prefetcher.
 
-In addition, .NET has `struct` types that allows us to create arrays of `struct` which guarantees that as long as we iterate over the array in order we access the memory sequentially.
+In addition, .NET has `struct` types that allows us to create arrays of `struct` which guarantees that as long as we iterate the array in order we access the memory sequentially.
 
 A common pattern to make better use of the memory bandwidth and cache is to split the data into hot and cold data. However, this requires intimate knowledge of the data access patterns or testing to get right.
 
-That's why I think `Structures of Arrays (SOA)` is interesting as that is taking will allow optimum usage of the cache and bandwidth but with the drawback the we need to lookup data in several arrays to the computation. When we run out of registers that means loading the pointers from the stack which itself is costly. Testing again is important to get it right.
+That's why I think `Structures of Arrays (SOA)` is interesting as it will allow optimum usage of the cache and bandwidth but with the drawback the we need to dereference several arrays during the computation. When we run out of registers that means loading the pointers from the stack which itself is costly. Testing again is important to get it right.
 
-I was suprised about the excellent performance of `Structures of Arrays (SOA)` version. I will need to revisit the jitted code in order to understand why `SOA` performed better than the other alternatives even for smaller data sets. One possibility is just buggy code but I compared the results of the different algorithms and they did come up equal.
+The blog post was intended to just be about data sizes and how it effects performance but when I started looking at the jitted code I found some efficiency problems I just **had** to address. I hope it's ok.
 
 I hope this was interesting to you.
 
