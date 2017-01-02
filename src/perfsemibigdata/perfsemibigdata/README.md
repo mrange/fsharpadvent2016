@@ -1,4 +1,6 @@
-# On the topic of data locality
+# On the topic of data locality and performance
+
+*[Full source code can be found here](https://github.com/mrange/fsharpadvent2016/tree/master/src/perfsemibigdata)*
 
 It is well-known that a hard disk has a long delay from that we request the data to that we get the data. Usually we measure the hard disk latency in milliseconds which is an eternity for a CPU. The bandwidth of a hard disk is decent good as SSD:s today can reach 1 GiB/second.
 
