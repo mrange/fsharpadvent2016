@@ -80,6 +80,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Common.fs" />
+    <Compile Include="FsLinq.fs" />
     <Compile Include="RedBlackTree.fs" />
     <Compile Include="Patches.fs" />
     <Compile Include="FsharpMap.fs" />

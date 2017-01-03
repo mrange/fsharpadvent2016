@@ -16,52 +16,39 @@
 
 open Common
 
-module FsCheckConfig =
-  open FsCheck
-#if DEBUG
-  let testCount = 100
-#else
-  let testCount = 1000
-#endif
-  let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
-
-module FsPropertyTests =
-  open Persistent
+module TestCommon =
   open System
 
-  module FsLinq =
-    open System.Linq
-
-    let inline first    source                        = Enumerable.First    (source)
-    let inline groupBy  (selector : 'T -> 'U) source  = Enumerable.GroupBy  (source, Func<'T, 'U> selector)
-    let inline last     source                        = Enumerable.Last     (source)
-    let inline map      (selector : 'T -> 'U) source  = Enumerable.Select   (source, Func<'T, 'U> selector)
-    let inline sortBy   (selector : 'T -> 'U) source  = Enumerable.OrderBy  (source, Func<'T, 'U> selector)
-    let inline toArray  source                        = Enumerable.ToArray  (source)
-
-  let uniqueKey vs =
-    vs
-    |> FsLinq.groupBy fst
-    |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last))
-    |> FsLinq.sortBy fst
-    |> FsLinq.toArray
-
-  let fromArray kvs =
-    Array.fold
-      (fun s (k, v) -> PersistentHashMap.set k v s)
-      PersistentHashMap.empty
-      kvs
-
-  let toArray phm =
-    phm
-    |> PersistentHashMap.toArray
-
-  let toSortedKeyArray phm =
-    let vs = phm |> toArray
-    vs |> Array.sortInPlaceBy fst
-    vs
-
   let notIdentical<'T when 'T : not struct> (f : 'T) (s : 'T) = obj.ReferenceEquals (f, s) |> not
+
+  let popCount v =
+    let rec loop c v =
+      if v <> 0u then
+        loop (c + 1) (v &&& (v - 1u))
+      else
+        c
+    loop 0 v
+
+  let copyArrayMakeHole at (vs : 'T []) hole =
+    let nvs = Array.zeroCreate (vs.Length + 1)
+    let rec idLoop c i =
+      if i < vs.Length then
+        if c = 0 then
+          skipLoop i
+        else
+          nvs.[i] <- vs.[i]
+          idLoop (c - 1) (i + 1)
+    and skipLoop i =
+      if i < vs.Length then
+        nvs.[i + 1] <- vs.[i]
+        skipLoop (i + 1)
+    idLoop at 0
+    nvs.[at] <- hole
+    nvs
+
+  [<AllowNullLiteral>]
+  type Empty () =
+    inherit obj ()
 
   type ComplexType =
     | IntKey    of  int
@@ -88,18 +75,91 @@ module FsPropertyTests =
     | Add     of int*string
     | Remove  of int
 
+module FsCheckConfig =
+  open FsCheck
+#if DEBUG
+  let testCount = 100
+#else
+  let testCount = 1000
+#endif
+  let config = { Config.Quick with MaxTest = testCount; MaxFail = testCount }
+
+module FsPropertyTests =
+  open TestCommon
+
+  open Persistent
+
+  let uniqueKey vs =
+    vs
+    |> FsLinq.groupBy fst
+    |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last))
+    |> FsLinq.sortBy fst
+    |> FsLinq.toArray
+
+  let fromArray kvs =
+    Array.fold
+      (fun s (k, v) -> PersistentHashMap.set k v s)
+      PersistentHashMap.empty
+      kvs
+
+  let toArray m phm =
+    phm
+    |> m
+    |> FsLinq.map (fun (KeyValue (k,v)) -> k, v)
+    |> FsLinq.toArray
+
+  let toSortedKeyArray m phm =
+    let vs = phm |> (toArray m)
+    vs |> Array.sortInPlaceBy fst
+    vs
+
   let checkInvariant (phm : PersistentHashMap<_, _>) = phm.CheckInvariant ()
 
   type Properties () =
+(*
+    TODO: Test these properties by exposing
+    static member ``PopCount returns number of set bits`` (i : uint32) =
+      let expected  = popCount i
+      let actual    = PersistentHashMap.PopCount i
 
-    static member ``PHM toArray must contain all added values`` (vs : (int*string) []) =
-      let expected  = uniqueKey vs
-      let phm       = vs |> fromArray
-      let actual    = phm |> toSortedKeyArray
+      expected      = actual
+
+    static member ``CopyArray copies the array`` (vs : int []) =
+      let expected  = vs
+      let actual    = PersistentHashMap.CopyArray vs
 
       notIdentical expected actual
-      && checkInvariant phm
       && expected = actual
+
+    static member ``CopyArrayMakeHoleLast copies the array and leaves a hole in last pos`` (vs : Empty []) (hole : Empty)=
+      let expected  = Array.append vs [| hole |]
+      let actual    = PersistentHashMap.CopyArrayMakeHoleLast (vs, hole)
+
+      notIdentical expected actual
+      && expected = actual
+
+    static member ``CopyArrayMakeHole copies the array and leaves a hole at pos`` (at : int) (vs : Empty []) (hole : Empty)=
+      let at        = abs at % (vs.Length + 1)
+      let expected  = copyArrayMakeHole at vs hole
+      let actual    = PersistentHashMap.CopyArrayMakeHole (at, vs, hole)
+
+      notIdentical expected actual
+      && expected = actual
+*)
+
+    static member ``PHM to* must contain all added values`` (vs : (int*string) []) =
+      let expected    = uniqueKey vs
+      let phm         = vs |> fromArray
+      let actualSeq   = phm |> toSortedKeyArray (PersistentHashMap.toSeq)
+      let actualArray = phm |> toSortedKeyArray (PersistentHashMap.toArray)
+
+      notIdentical    expected  actualSeq
+      && notIdentical expected  actualArray
+      && notIdentical actualSeq actualArray
+      && checkInvariant phm
+      && expected = actualSeq
+      && expected = actualArray
+
 
     static member ``PHM TryFind must return all added values`` (vs : (ComplexType*ComplexType) []) =
       let unique    = uniqueKey vs
@@ -221,125 +281,50 @@ module FsPropertyTests =
     printfn "  Done"
 
   let run () =
-    // Properties.``PHM TryFind must return all added values`` [|(IntKey 33, StringKey 0); (StringKey -31, TupleKey (0,""))|] |> printfn "%A"
+//    Properties.``PHM to* must contain all added values`` [|(1, ""); (0, "")|] |> printfn "Result: %A"
     Check.All<Properties> FsCheckConfig.config
     testLongInsert ()
 
 module PropertyTests =
+  open TestCommon
+
   open FsCheck
   open PHM.CS
 
-  open System
-  open System.Collections.Generic
+  let empty () = PersistentHashMap.Empty<_, _> ()
 
-  [<AllowNullLiteral>]
-  type Empty () =
-    inherit obj ()
+  let set k v (phm : PersistentHashMap<_, _>) = phm.Set (k, v)
 
-  module FsLinq =
-    open System.Linq
+  let length (phm : PersistentHashMap<_, _>) =
+    let mutable l = 0
+    let visitor _ _ = l <- l + 1; true
+    phm.Visit (System.Func<_, _, _> visitor) |> ignore
+    l
 
-    let inline first    source                        = Enumerable.First    (source)
-    let inline groupBy  (selector : 'T -> 'U) source  = Enumerable.GroupBy  (source, Func<'T, 'U> selector)
-    let inline last     source                        = Enumerable.Last     (source)
-    let inline map      (selector : 'T -> 'U) source  = Enumerable.Select   (source, Func<'T, 'U> selector)
-    let inline sortBy   (selector : 'T -> 'U) source  = Enumerable.OrderBy  (source, Func<'T, 'U> selector)
-    let inline toArray  source                        = Enumerable.ToArray  (source)
+  let uniqueKey vs =
+    vs
+    |> FsLinq.groupBy fst
+    |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last))
+    |> FsLinq.sortBy fst
+    |> FsLinq.toArray
 
-  module Common =
-    let notIdentical<'T when 'T : not struct> (f : 'T) (s : 'T) = obj.ReferenceEquals (f, s) |> not
+  let fromArray kvs =
+    Array.fold
+      (fun s (k, v) -> set k v s)
+      (empty ())
+      kvs
 
-    let check b str =
-      if not b then
-        printfn "Check failed: %s" str
-        failwith str
+  let toArray (phm : PersistentHashMap<'K, 'V>) =
+    phm
+    |> FsLinq.map (fun kv -> kv.Key, kv.Value)
+    |> FsLinq.toArray
 
-    let popCount v =
-      let rec loop c v =
-        if v <> 0u then
-          loop (c + 1) (v &&& (v - 1u))
-        else
-          c
-      loop 0 v
+  let toSortedKeyArray phm =
+    let vs = phm |> toArray
+    vs |> Array.sortInPlaceBy fst
+    vs
 
-    let copyArrayMakeHole at (vs : 'T []) hole =
-      let nvs = Array.zeroCreate (vs.Length + 1)
-      let rec idLoop c i =
-        if i < vs.Length then
-          if c = 0 then
-            skipLoop i
-          else
-            nvs.[i] <- vs.[i]
-            idLoop (c - 1) (i + 1)
-      and skipLoop i =
-        if i < vs.Length then
-          nvs.[i + 1] <- vs.[i]
-          skipLoop (i + 1)
-      idLoop at 0
-      nvs.[at] <- hole
-      nvs
-
-    let empty () = PersistentHashMap.Empty<_, _> ()
-
-    let set k v (phm : PersistentHashMap<_, _>) = phm.Set (k, v)
-
-    let length (phm : PersistentHashMap<_, _>) =
-      let mutable l = 0
-      let visitor _ _ = l <- l + 1; true
-      phm.Visit (Func<_, _, _> visitor) |> ignore
-      l
-
-    let uniqueKey vs =
-      vs
-      |> FsLinq.groupBy fst
-      |> FsLinq.map (fun g -> g.Key, (g |> FsLinq.map snd |> FsLinq.last))
-      |> FsLinq.sortBy fst
-      |> FsLinq.toArray
-
-    let fromArray kvs =
-      Array.fold
-        (fun s (k, v) -> set k v s)
-        (empty ())
-        kvs
-
-    let toArray (phm : PersistentHashMap<'K, 'V>) =
-      phm
-      |> FsLinq.map (fun kv -> kv.Key, kv.Value)
-      |> FsLinq.toArray
-
-    let toSortedKeyArray phm =
-      let vs = phm |> toArray
-      vs |> Array.sortInPlaceBy fst
-      vs
-
-    let checkInvariant (phm : PersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
-
-  open Common
-
-  type ComplexType =
-    | IntKey    of  int
-    | StringKey of  int
-    | TupleKey  of  int*string
-
-  type HalfHash(v : int) =
-    member x.Value = v
-
-    interface IComparable<HalfHash> with
-      member x.CompareTo(o : HalfHash)  = v.CompareTo o.Value
-
-    interface IEquatable<HalfHash> with
-      member x.Equals(o : HalfHash)  = v = o.Value
-
-    override x.Equals(o : obj)  =
-      match o with
-      | :? HalfHash as k -> v = k.Value
-      | _                -> false
-    override x.GetHashCode()    = (v.GetHashCode ()) >>> 16 // In order to get a fair bunch of duplicated hashes
-    override x.ToString()       = sprintf "%d" v
-
-  type Action =
-    | Add     of int*string
-    | Remove  of int
+  let checkInvariant (phm : PersistentHashMap<'K, 'V>) = phm.CheckInvariant ()
 
   type Properties () =
     static member ``PopCount returns number of set bits`` (i : uint32) =
@@ -428,7 +413,7 @@ module PropertyTests =
           | Some fv -> v = fv
           | _       -> false
 
-        checkInvariant phm && (length phm = map.Count) && empty && phm.Visit (Func<_, _, _> visitor)
+        checkInvariant phm && (length phm = map.Count) && empty && phm.Visit (System.Func<_, _, _> visitor)
 
       let ra = ResizeArray<int> ()
 
@@ -494,7 +479,6 @@ module PropertyTests =
     printfn "  Done"
 
   let run () =
-//    Properties.``PHM toArray must contain all added values`` [|(13, null); (-3, ""); (0, "")|] |> printfn "Result: %A"
     Check.All<Properties> FsCheckConfig.config
     testLongInsert ()
 

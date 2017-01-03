@@ -453,11 +453,12 @@ and PersistentHashMapEnumeratorState =
 and PersistentHashMapEnumerator<'K, 'V when 'K :> System.IEquatable<'K>> (root : PersistentHashMap<'K, 'V>) =
   // There are more elegant ways to implement an enumerator but we would like an enumerator that is rather efficient
 
+  let head              = BitmapNode1 (0us, root) // head is a fake node to simplify code a bit
   let mutable state     = Initial
   let mutable level     = 0
   let mutable keyValue  = Unchecked.defaultof<_>
-  let nodes             = Array.zeroCreate TrieMaxLevel
-  let indices           = Array.zeroCreate TrieMaxLevel
+  let nodes             = Array.zeroCreate (TrieMaxLevel + 1)
+  let indices           = Array.zeroCreate (TrieMaxLevel + 1)
 
   let raiseDisposed ()  = raise (System.ObjectDisposedException ("Enumeration is disposed"))
 
@@ -466,7 +467,7 @@ and PersistentHashMapEnumerator<'K, 'V when 'K :> System.IEquatable<'K>> (root :
     state       <- s
     level       <- 0
     keyValue    <- Unchecked.defaultof<_>
-    for i in 0..(TrieMaxLevel - 1) do
+    for i in 0..TrieMaxLevel do
       nodes.[i]   <- Unchecked.defaultof<_>
       indices.[i] <- 0
 
@@ -477,23 +478,25 @@ and PersistentHashMapEnumerator<'K, 'V when 'K :> System.IEquatable<'K>> (root :
     | Done      -> invalidOp "Enumeration has reached its end."
     | Disposed  -> raiseDisposed ()
 
-  let rec moveNextLoop currentLevel =
-    if currentLevel >= 0 then
-      let node        = nodes.[currentLevel] : PersistentHashMap<'K, 'V>
-      let index       = indices.[currentLevel] + 1
+  let rec moveNextLoop () =
+    if level >= 0 then
+      let node        = nodes.[level] : PersistentHashMap<'K, 'V>
+      let index       = indices.[level] + 1
       let mutable phm = Unchecked.defaultof<_>
       if node.DoGetChild (index, &phm) then
+        indices.[level] <- index
         match box phm with
         | :? KeyValueNode<'K, 'V> as kv ->
-          indices.[currentLevel] <- index
           keyValue <- KeyValuePair<'K, 'V> (kv.Key, kv.Value)
           true
         | _ ->
-          nodes.[currentLevel + 1]    <- phm
-          indices.[currentLevel + 1]  <- -1
-          moveNextLoop (currentLevel + 1)
+          level           <- level + 1
+          nodes.[level]   <- phm
+          indices.[level] <- -1
+          moveNextLoop ()
       else
-        moveNextLoop (level - 1)
+        level <- level - 1
+        moveNextLoop ()
     else
       reset Done
       false
@@ -501,13 +504,13 @@ and PersistentHashMapEnumerator<'K, 'V when 'K :> System.IEquatable<'K>> (root :
   let moveNext () =
     match state with
     | Iterating ->
-      moveNextLoop level
+      moveNextLoop ()
     | Initial   ->
       state       <- Iterating
       level       <- 0
-      nodes.[0]   <- root
+      nodes.[0]   <- upcast head
       indices.[0] <- -1
-      moveNextLoop level
+      moveNextLoop ()
     | Done      ->
       false
     | Disposed  ->
