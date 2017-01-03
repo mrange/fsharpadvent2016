@@ -20,16 +20,18 @@
 
 namespace Persistent
 
-module Details = 
+module Details =
   open System
   [<Literal>]
   let TrieShift     = 4
   [<Literal>]
-  let TrieMaxShift  = 32
+  let TrieMaxShift  = 32  // # of bits in int
   [<Literal>]
-  let TrieMaxNodes  = 16  // 1 <<< downshift
+  let TrieMaxLevel  = 8   // TrieMaxShift / TrieShift
   [<Literal>]
-  let TrieMask      = 15u // maxNodes - 1
+  let TrieMaxNodes  = 16  // 1 <<< TrieShift
+  [<Literal>]
+  let TrieMask      = 15u // TrieMaxNodes - 1
 
   let inline localHash  h s = (h >>> s) &&& TrieMask
   let inline bit        h s = 1us <<< int (localHash h s)
@@ -77,8 +79,16 @@ module Details =
 
 open Details
 
-type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() =
+open System.Collections.Generic
+
+type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() as self =
   static let emptyNode = EmptyNode<'K, 'V> () :> PersistentHashMap<'K, 'V>
+
+  let createEnumerator () = new PersistentHashMapEnumerator<_, _> (self)
+
+  interface IEnumerable<KeyValuePair<'K,'V>> with
+    override x.GetEnumerator () = createEnumerator () :> IEnumerator<KeyValuePair<'K, 'V>>
+    override x.GetEnumerator () = createEnumerator () :> System.Collections.IEnumerator
 
 #if PHM_TEST_BUILD
   abstract DoCheckInvariant : uint32  -> int  -> bool
@@ -88,10 +98,12 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   abstract DoSet            : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
   abstract DoTryFind        : uint32*int*'K*byref<'V> -> bool
   abstract DoUnset          : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
+  abstract DoGetChild       : int*byref<PersistentHashMap<'K, 'V>> -> bool
 
   default  x.DoIsEmpty ()   = false
 
 #if PHM_TEST_BUILD
+  // TODO: CheckInvariant should check max depth as well
   member x.CheckInvariant () = x.DoCheckInvariant 0u 0
 #endif
   member x.IsEmpty    = x.DoIsEmpty ()
@@ -130,6 +142,7 @@ and [<Sealed>] internal EmptyNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
   override x.DoSet      h s kv        = upcast kv
   override x.DoTryFind  (h, s, k, rv) = false
   override x.DoUnset    h s k         = PersistentHashMap<'K, 'V>.Empty
+  override x.DoGetChild (i, phm)      = false
 
 and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, key : 'K, value : 'V) =
   inherit PersistentHashMap<'K, 'V>()
@@ -147,7 +160,7 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
   override x.DoSet      h s kv      =
     let k = kv.Key
     if h = hash && equals k key then
-      upcast KeyValueNode (h, k, kv.Value)
+      upcast kv
     elif h = hash then
       upcast HashCollisionNodeN (h, [| x; kv |])
     else
@@ -163,6 +176,8 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
       PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
+  override x.DoGetChild (i, phm)    =
+    false
 
 and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint16, node : PersistentHashMap<'K, 'V>) =
   inherit PersistentHashMap<'K, 'V>()
@@ -200,6 +215,13 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
         PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
+  override x.DoGetChild (i, phm)    =
+    if i = 0 then
+      phm <- node
+      true
+    else
+      false
+
 
 and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bitmap : uint16, nodes : PersistentHashMap<'K, 'V> []) =
   inherit PersistentHashMap<'K, 'V>()
@@ -267,11 +289,18 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
           let nns = copyArrayRemoveHole localIdx nodes
           upcast BitmapNodeN (bitmap &&& ~~~bit, nns)
         elif nodes.Length > 1 then
+          // TODO: Should be able to eliminate this level if child node is KeyValueNode
           upcast BitmapNode1 (bitmap &&& ~~~bit, nodes.[1 - localIdx])
         else
           PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
+  override x.DoGetChild (i, phm)    =
+    if i < nodes.Length then
+      phm <- nodes.[i]
+      true
+    else
+      false
 
 and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(nodes : PersistentHashMap<'K, 'V> []) =
   inherit PersistentHashMap<'K, 'V>()
@@ -320,6 +349,12 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
     else
       let nns = copyArrayRemoveHole localIdx nodes
       upcast BitmapNodeN (~~~bit, nns)
+  override x.DoGetChild (i, phm)    =
+    if i < nodes.Length then
+      phm <- nodes.[i]
+      true
+    else
+      false
 
 and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, keyValues : KeyValueNode<'K, 'V> []) =
   inherit PersistentHashMap<'K, 'V>()
@@ -402,4 +437,88 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
         upcast x
     else
       upcast x
+  override x.DoGetChild (i, phm)    =
+    if i < keyValues.Length then
+      phm <- keyValues.[i]
+      true
+    else
+      false
+
+and PersistentHashMapEnumeratorState =
+  | Iterating
+  | Initial
+  | Done
+  | Disposed
+
+and PersistentHashMapEnumerator<'K, 'V when 'K :> System.IEquatable<'K>> (root : PersistentHashMap<'K, 'V>) =
+  // There are more elegant ways to implement an enumerator but we would like an enumerator that is rather efficient
+
+  let mutable state     = Initial
+  let mutable level     = 0
+  let mutable keyValue  = Unchecked.defaultof<_>
+  let nodes             = Array.zeroCreate TrieMaxLevel
+  let indices           = Array.zeroCreate TrieMaxLevel
+
+  let raiseDisposed ()  = raise (System.ObjectDisposedException ("Enumeration is disposed"))
+
+  let reset s   =
+    if state = Disposed && s <> Disposed then raiseDisposed ()
+    state       <- s
+    level       <- 0
+    keyValue    <- Unchecked.defaultof<_>
+    for i in 0..(TrieMaxLevel - 1) do
+      nodes.[i]   <- Unchecked.defaultof<_>
+      indices.[i] <- 0
+
+  let current ()  =
+    match state with
+    | Iterating -> keyValue
+    | Initial   -> invalidOp "Enumeration hasn't started. Call MoveNext."
+    | Done      -> invalidOp "Enumeration has reached its end."
+    | Disposed  -> raiseDisposed ()
+
+  let rec moveNextLoop currentLevel =
+    if currentLevel >= 0 then
+      let node        = nodes.[currentLevel] : PersistentHashMap<'K, 'V>
+      let index       = indices.[currentLevel] + 1
+      let mutable phm = Unchecked.defaultof<_>
+      if node.DoGetChild (index, &phm) then
+        match box phm with
+        | :? KeyValueNode<'K, 'V> as kv ->
+          indices.[currentLevel] <- index
+          keyValue <- KeyValuePair<'K, 'V> (kv.Key, kv.Value)
+          true
+        | _ ->
+          nodes.[currentLevel + 1]    <- phm
+          indices.[currentLevel + 1]  <- -1
+          moveNextLoop (currentLevel + 1)
+      else
+        moveNextLoop (level - 1)
+    else
+      reset Done
+      false
+
+  let moveNext () =
+    match state with
+    | Iterating ->
+      moveNextLoop level
+    | Initial   ->
+      state       <- Iterating
+      level       <- 0
+      nodes.[0]   <- root
+      indices.[0] <- -1
+      moveNextLoop level
+    | Done      ->
+      false
+    | Disposed  ->
+      raiseDisposed ()
+
+  interface IEnumerator<KeyValuePair<'K, 'V>> with
+    member __.Current   = current ()
+  interface System.Collections.IEnumerator with
+    member __.Current     = current () |> box
+    member __.MoveNext()  = moveNext ()
+    member __.Reset()     = reset Initial
+  interface System.IDisposable with
+    member __.Dispose()   = reset Disposed
 
