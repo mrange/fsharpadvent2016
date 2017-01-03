@@ -40,7 +40,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     interface IEnumerable<KeyValuePair<'K,'V>>
 
 #if PHM_TEST_BUILD
-    abstract internal DoCheckInvariant : uint32  -> int  -> bool
+    abstract internal DoCheckInvariant : uint32 -> int -> int -> bool
 #endif
     // TODO: Why aren't these tagged as internal in the generated assembly
     abstract internal DoIsEmpty   : unit    -> bool

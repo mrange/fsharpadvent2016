@@ -91,7 +91,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     override x.GetEnumerator () = createEnumerator () :> System.Collections.IEnumerator
 
 #if PHM_TEST_BUILD
-  abstract DoCheckInvariant : uint32  -> int  -> bool
+  abstract DoCheckInvariant : uint32 -> int -> int -> bool
 #endif
   abstract DoIsEmpty        : unit    -> bool
   abstract DoVisit          : OptimizedClosures.FSharpFunc<'K, 'V, bool> -> bool
@@ -103,8 +103,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   default  x.DoIsEmpty ()   = false
 
 #if PHM_TEST_BUILD
-  // TODO: CheckInvariant should check max depth as well
-  member x.CheckInvariant () = x.DoCheckInvariant 0u 0
+  member x.CheckInvariant () = x.DoCheckInvariant 0u 0 0
 #endif
   member x.IsEmpty    = x.DoIsEmpty ()
   member x.Visit   r  = x.DoVisit (OptimizedClosures.FSharpFunc<_, _, _>.Adapt r)
@@ -135,7 +134,7 @@ and [<Sealed>] internal EmptyNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
-  override x.DoCheckInvariant h s = true
+  override x.DoCheckInvariant h s d = d < TrieMaxLevel
 #endif
   override x.DoVisit    r             = true
   override x.DoIsEmpty  ()            = true
@@ -152,8 +151,9 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
   member x.Value  = value
 
 #if PHM_TEST_BUILD
-  override x.DoCheckInvariant h s =
-    checkHash hash h s
+  override x.DoCheckInvariant h s d =
+    d < TrieMaxLevel
+    &&  checkHash hash h s
     && hash = hashOf key
 #endif
   override x.DoVisit    r           = r.Invoke (key, value)
@@ -183,10 +183,11 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
-  override x.DoCheckInvariant h s =
+  override x.DoCheckInvariant h s d =
     let localIdx = popCount (bitmap - 1us)
-    popCount bitmap |> int = 1
-    && node.DoCheckInvariant (h ||| (localIdx <<< s)) (s + TrieShift)
+    d < TrieMaxLevel
+    && popCount bitmap |> int = 1
+    && node.DoCheckInvariant (h ||| (localIdx <<< s)) (s + TrieShift) (d + 1)
 #endif
   override x.DoVisit    r           = node.DoVisit r
   override x.DoSet      h s kv      =
@@ -227,14 +228,14 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
-  let rec doCheckInvariantNodes (hash : uint32) shift b localHash i =
+  let rec doCheckInvariantNodes (hash : uint32) shift b localHash i d =
     if b <> 0us && i < nodes.Length then
       let n = nodes.[i]
       if (b &&& 1us) = 0us then
-        doCheckInvariantNodes hash shift (b >>> 1) (localHash + 1u) i
+        doCheckInvariantNodes hash shift (b >>> 1) (localHash + 1u) i d
       else
-        n.DoCheckInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift)
-        && doCheckInvariantNodes hash shift (b >>> 1) (localHash + 1u) (i + 1)
+        n.DoCheckInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift) (d + 1)
+        && doCheckInvariantNodes hash shift (b >>> 1) (localHash + 1u) (i + 1) d
     else
       b = 0us
 #endif
@@ -248,10 +249,11 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
       true
 
 #if PHM_TEST_BUILD
-  override x.DoCheckInvariant h s =
-    popCount bitmap |> int = nodes.Length
+  override x.DoCheckInvariant h s d =
+    d < TrieMaxLevel
+    && popCount bitmap |> int = nodes.Length
 //          && ns.Length > 1
-    && doCheckInvariantNodes h s bitmap 0u 0
+    && doCheckInvariantNodes h s bitmap 0u 0 d
 #endif
   override x.DoVisit    r           = doVisit r 0
   override x.DoSet      h s kv      =
@@ -306,11 +308,11 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
-  let rec doCheckInvariantNodes (hash : uint32) shift localHash i =
+  let rec doCheckInvariantNodes (hash : uint32) shift localHash i d =
     if i < nodes.Length then
       let n = nodes.[i]
-      n.DoCheckInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift)
-      && doCheckInvariantNodes hash shift (localHash + 1u) (i + 1)
+      n.DoCheckInvariant (hash ||| (localHash <<< shift)) (shift + TrieShift) (d + 1)
+      && doCheckInvariantNodes hash shift (localHash + 1u) (i + 1) d
     else
       true
 #endif
@@ -324,9 +326,10 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
       true
 
 #if PHM_TEST_BUILD
-  override x.DoCheckInvariant h s =
+  override x.DoCheckInvariant h s d =
 //          && ns.Length > 1
-    doCheckInvariantNodes h s 0u 0
+    d < TrieMaxLevel
+    && doCheckInvariantNodes h s 0u 0 d
 #endif
   override x.DoVisit    r           = doVisit r 0
   override x.DoSet      h s kv      =
@@ -360,12 +363,12 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
-  let rec doCheckInvariant h s i =
+  let rec doCheckInvariant h s i d =
     if i < keyValues.Length then
       let kv = keyValues.[i]
       hash = hashOf kv.Key
-      && kv.DoCheckInvariant h s
-      && doCheckInvariant h s (i + 1)
+      && kv.DoCheckInvariant h s (d + 1)
+      && doCheckInvariant h s (i + 1) d
     else
       true
 #endif
@@ -399,10 +402,11 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
       -1
 
 #if PHM_TEST_BUILD
-  override x.DoCheckInvariant h s =
-    checkHash hash h s
+  override x.DoCheckInvariant h s d =
+    d < TrieMaxLevel
+    && checkHash hash h s
     && keyValues.Length > 1
-    && doCheckInvariant h s 0
+    && doCheckInvariant h s 0 d
 #endif
   override x.DoVisit    r           = doVisit r 0
   override x.DoSet      h s kv      =
