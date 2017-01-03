@@ -18,6 +18,8 @@ namespace Persistent
 
 module PersistentHashMap =
 
+  open System.Collections.Generic
+
   let inline containsKey (key : 'K) (m : PersistentHashMap<'K, 'V>) : bool =
     match m.TryFind key with
     | true, _ -> true
@@ -43,10 +45,13 @@ module PersistentHashMap =
   let inline visit (visitor : 'K -> 'V -> bool) (m : PersistentHashMap<'K, 'V>) : bool =
     m.Visit visitor
 
-  let inline toArray (m : PersistentHashMap<'K, 'V>) : ('K*'V) [] =
+  let inline toArray (m : PersistentHashMap<'K, 'V>) : KeyValuePair<'K, 'V> [] =
     let ra = ResizeArray<_> 16
-    visit (fun k v -> ra.Add (k, v); true) m |> ignore
+    visit (fun k v -> ra.Add (KeyValuePair (k, v)); true) m |> ignore
     ra.ToArray ()
+
+  let inline toSeq (m : PersistentHashMap<'K, 'V>) : seq<KeyValuePair<'K, 'V>> =
+    upcast m
 
   let inline length (m : PersistentHashMap<'K, 'V>) : int =
     let l = ref 0

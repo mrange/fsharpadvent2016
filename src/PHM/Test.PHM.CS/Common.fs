@@ -16,6 +16,8 @@
 
 module Common
 
+open System.Collections.Generic
+
 let makeRandom (seed : int) =
   let mutable state = int64 seed
   let m = 0x7FFFFFFFL // 2^31 - 1
@@ -36,3 +38,8 @@ let shuffle random vs =
     a.[s] <- a.[i]
     a.[i] <- t
   a
+
+let inline key   (kv : KeyValuePair<'K, 'V>) = kv.Key
+let inline value (kv : KeyValuePair<'K, 'V>) = kv.Value
+
+let inline keyValue k v = KeyValuePair (k, v)

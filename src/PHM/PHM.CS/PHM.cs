@@ -77,7 +77,7 @@ namespace PHM.CS
 #if PHM_TEST_BUILD
     public bool CheckInvariant ()
     {
-      return CheckInvariant (0, 0);
+      return CheckInvariant (0, 0, 0);
     }
 #endif
 
@@ -98,7 +98,7 @@ namespace PHM.CS
 #endif
 
 #if PHM_TEST_BUILD
-    internal abstract bool                      CheckInvariant  (uint h, int s);
+    internal abstract bool                      CheckInvariant  (uint h, int s, int d);
     internal abstract void                      Describe        (StringBuilder sb, int indent);
 #endif
     internal virtual  bool                      Empty           ()
@@ -119,10 +119,11 @@ namespace PHM.CS
       return PersistentHashMap<K ,V>.EmptyNode;
     }
 
-    internal const int TrieShift    = 4                 ;
-    internal const int TrieMaxShift = 32                ;
-    internal const int TrieMaxNodes = 1 << TrieShift    ;
-    internal const int TrieMask     = TrieMaxNodes - 1  ;
+    internal const int TrieShift    = 4                       ;
+    internal const int TrieMaxShift = 32                      ;
+    internal const int TrieMaxLevel = TrieMaxShift / TrieShift;
+    internal const int TrieMaxNodes = 1 << TrieShift          ;
+    internal const int TrieMask     = TrieMaxNodes - 1        ;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal static uint LocalHash (uint h, int s)
@@ -222,9 +223,9 @@ namespace PHM.CS
       }
 
 #if PHM_TEST_BUILD
-      internal override bool CheckInvariant (uint h, int s)
+      internal override bool CheckInvariant (uint h, int s, int d)
       {
-        return true;
+        return d < TrieMaxLevel;
       }
 
       internal override void Describe (StringBuilder sb, int indent)
@@ -280,9 +281,12 @@ namespace PHM.CS
       }
 
 #if PHM_TEST_BUILD
-      internal override bool CheckInvariant (uint h, int s)
+      internal override bool CheckInvariant (uint h, int s, int d)
       {
-        return CheckHash (Hash, h, s) && (Hash == (uint)Key.GetHashCode ());
+        return
+          d < TrieMaxLevel
+          && CheckHash (Hash, h, s)
+          && (Hash == (uint)Key.GetHashCode ());
       }
 
       internal override void Describe (StringBuilder sb, int indent)
@@ -365,8 +369,13 @@ namespace PHM.CS
       }
 
 #if PHM_TEST_BUILD
-      internal override bool CheckInvariant (uint h, int s)
+      internal override bool CheckInvariant (uint h, int s, int d)
       {
+        if (d >= TrieMaxLevel)
+        {
+          return false;
+        }
+
         if (PopCount (Bitmap) != 1)
         {
           return false;
@@ -376,7 +385,7 @@ namespace PHM.CS
 
         var localIdx = PopCount (Bitmap - 1);
 
-        if (!Node.CheckInvariant (h | (uint)(localIdx << s), s + TrieShift))
+        if (!Node.CheckInvariant (h | (uint)(localIdx << s), s + TrieShift, d + 1))
         {
           return false;
         }
@@ -507,8 +516,13 @@ namespace PHM.CS
       }
 
 #if PHM_TEST_BUILD
-      internal override bool CheckInvariant (uint h, int s)
+      internal override bool CheckInvariant (uint h, int s, int d)
       {
+        if (d >= TrieMaxLevel)
+        {
+          return false;
+        }
+
         var length = PopCount (Bitmap);
         if (length < 2 || length != Nodes.Length)
         {
@@ -540,7 +554,7 @@ namespace PHM.CS
             return false;
           }
 
-          if (!n.CheckInvariant (h | (uint)(hash << s), s + TrieShift))
+          if (!n.CheckInvariant (h | (uint)(hash << s), s + TrieShift, d + 1))
           {
             return false;
           }
@@ -673,8 +687,13 @@ namespace PHM.CS
       }
 
 #if PHM_TEST_BUILD
-      internal override bool CheckInvariant (uint h, int s)
+      internal override bool CheckInvariant (uint h, int s, int d)
       {
+        if (d >= TrieMaxLevel)
+        {
+          return false;
+        }
+
         if (TrieMaxNodes != Nodes.Length)
         {
           return false;
@@ -688,7 +707,7 @@ namespace PHM.CS
             return false;
           }
 
-          if (!n.CheckInvariant (h | (uint)(iter << s), s + TrieShift))
+          if (!n.CheckInvariant (h | (uint)(iter << s), s + TrieShift, d + 1))
           {
             return false;
           }
@@ -785,8 +804,13 @@ namespace PHM.CS
       }
 
 #if PHM_TEST_BUILD
-      internal override bool CheckInvariant (uint h, int s)
+      internal override bool CheckInvariant (uint h, int s, int d)
       {
+        if (d >= TrieMaxLevel)
+        {
+          return false;
+        }
+
         if (KeyValues.Length < 2)
         {
           return false;
@@ -801,7 +825,7 @@ namespace PHM.CS
             return false;
           }
 
-          if (!kv.CheckInvariant (h, s))
+          if (!kv.CheckInvariant (h, s, d + 1))
           {
             return false;
           }
