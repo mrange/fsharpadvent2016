@@ -15,12 +15,12 @@ The CPU on my machine has 3 layers of cache:
 ```
 L1: 256KiB
 L2: 1MiB
-L3: 6MiB (shared for all cores)
+L3: 6MiB
 ```
 
 A simple way of thinking about the cost of reading data is that if reading from L1 has the cost of `1`, the cost of reading from L2 is `10`, the cost of reading from L3 is `100` and the cost of reading from RAM is `1000`.
 
-When we need to write highly performant code that process a lot of data we want to minimize the foot-print of the data to ensure as much as possible fits into the `L1` cache and that we uses the band-width as efficiently as possible. Because of the prefetcher we should read data sequentially.
+When we need to write highly performant code that process a lot of data we want to minimize the foot-print of the data to ensure as much as possible fits into the L1 cache and that we uses the band-width as efficiently as possible. Because of the prefetcher we should read data sequentially.
 
 ## What is a lot of data?
 
@@ -214,7 +214,7 @@ Overall there seems to be lots of roundtrips to and from invisible local variabl
 
 I don't understand exactly why this is so but I suspect the jitter struggles to establish a holistic view that allows it to eliminate the intermediate results from each operation and therefore stores the results as invisible local variables to be sure. If the jitter was more advanced or had more CPU time available to it it should be able to eliminate the intermediate results.
 
-To address this so in the test case **Hot & Cold (No Algebra)** I know longer rely on Vector algebra but instead implement a helper function like this for the verlet integration:
+To address this test case **Hot & Cold (No Algebra)** no longer rely on Vector algebra but instead uses a helper for the verlet integration:
 
 ```fsharp
   let inline verlet (current : Vector) (previous : Vector) (globalAcceleration : Vector) : Vector =
@@ -406,7 +406,7 @@ These are the different test cases we like to measure:
 0. **Structures of Arrays**                   - Uses `SOA` over `AOS`
 0. **Structures of Arrays (SIMD)**            - Uses `SOA` over `AOS` with .NET 4.6 SIMD Note; .NET SIMD only support single float precision so not exactly equivalent test.
 
-## Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
+### Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
 
 ![Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/yMhzGG1.png)
 
@@ -426,21 +426,31 @@ In no other cases shuffling seems to effect performance negatively as expected.
 
 In order to easier estimate the order on how the performance depend on the data size I provide a chart where x-axis and y-axis is logarithmic
 
+### Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
+
 ![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/Xim9A9Q.png)
 
 For **Class (Shuffle)** one sees three plateaus in the test data that are delimited by a linear growth of performance (as the axes are both logarithmic).
 
 I have marked the three plateaus with `A`, `B` and `C`.
 
-An explaination for the three plateaus could be that the `A` plateau is when the data fits into `L1` cache. For plateau `B` the data still fit into `L2` but because `L2` is slower the performance degrades somewhat. `C` plateau then matches `L3` cache.
+An explanation for the three plateaus could be that the `A` plateau is when the data fits into L1 cache. For plateau `B` the data still fit into L2 but because L2 is slower the performance degrades somewhat. `C` plateau then matches L3 cache.
 
-As nice explaination as this is it doesn't match the input data.
+As nice explanation as this is it doesn't match the input data.
 
-Consider plateau `B`. It starts at 210 particles and end at 1485 particles. Since the size of a particle reported by .NET is 216 bytes (also matches manual estimate) that would mean the `A` runs out at 44KiB and `B` runs out at 313KiB but that doesn't match the numbers for my machine. In addition, plateau `A` ends at 1830KiB.
+Consider plateau `B`. It starts at 210 particles and end at 1485 particles. Since the size of a particle reported by .NET is 216 bytes (also matches manual estimate) that would mean the `A` runs out at 44KiB and `B` runs out at 313KiB but that doesn't match the numbers for my machine. In addition, plateau `C` ends at 1830KiB.
 
 The plateaus are interesting but I don't know how to correctly interpret them at this point.
 
 Finally, it seems that the performance for **Class (Shuffle)** asymptotically goes towards 1200 ms. As it starts at 200ms it means that the memory latency overhead is 1 second. We are processing 10,000,000 particles that means that the latency per particle is 100 ns which is quite close to the 120 ns reported by Intel® Memory Latency Checker tool.
+
+### **Update 2017-01-04**: The plateaus now makes more sense.
+
+A former colleague of mine, Henning, pointed out that the Core I5 has 64KiB of L1 cache per core, the total for all 4 cores is 256KiB. In addition, only 32KiB is data cache the other 32KiB is instruction cache. The L2 cache is also just 256KiB per core but 1MiB in total. The L3 cache is 6MiB shared for all 4 cores.
+
+So plateau `A` ends at 210 particles which is then 44KiB, this number is close to 32KiB L1 data cache available to the core. Looking more closely at the charts it seems plateau `B` ends at at 1123 particles which is 236KiB which is close to the 256KiB L2 cache available to the core.
+
+So the numbers and the input data matches decently for L1 and L2 cache now.
 
 ## Conclusions
 
