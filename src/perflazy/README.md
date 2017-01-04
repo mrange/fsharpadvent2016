@@ -2,6 +2,11 @@
 
 *[Full source code can be found here](https://github.com/mrange/fsharpadvent2016/tree/master/src/perflazy)*
 
+## Changelog
+
+1. **2017-01-04**
+  1. **New performance test** - Paul Westcott ([@manofstick](https://github.com/manofstick)) provided his implementation of Lazy semantics (called Lazzzy) which I included in the graphs. This implementation is intended to be equivalent to `Lazy<'T>` in .NET with regards to functionality.
+
 Previously I have looked at performance of different [persistent hash maps](https://gist.github.com/mrange/d6e7415113ebfa52ccb660f4ce534dd4) and [data pipelines](https://gist.github.com/mrange/09ba6d7541468de49426eeb81a8b660c) in .NET. Now I wonder:
 
 *What is the cost of being lazy?*
@@ -51,6 +56,9 @@ These are the alternatives I selected:
 0. **Lazy (Execution & Publication)**  - `F#` internally uses .NET `Lazy<'T>` with Execution & Publication protection so we expect the performance to be identical.
 0. **Lazy (Publication)**              - Same as above but here we only uses publication protection. That means that the computation might be carried out by several threads but only one of the results are cached. There subtleties that I haven't dug into yet on whether all threads will see the same instance or not?
 0. **Lazy (None)**                     - No thread safety, if multiple threads are dereferencing the lazy value the behavior is undefined.
+0. **Lazzzy (Execution & Publication)**  - Paul Westcott ([@manofstick](https://github.com/manofstick)) provided his implementation of Lazy semantics (called Lazzzy).
+0. **Lazzzy (Publication)**              - -"-
+0. **Lazzzy (None)**                     - -"-
 0. **Flag (Trivial)**                  - A lazy implementation using a simple unprotected flag to decide whether a value is computed or not. Doesn't cache exceptions.
 0. **Flag (Compact)**                  - A lazy implementation letting the value act both value and flag. Doesn't cache exceptions.
 0. **Flag (Exception aware)**           - A lazy implementation using a simple unprotected flag to decide whether a value is computed or not. Does cache exceptions.
@@ -60,7 +68,7 @@ These are the alternatives I selected:
 
 ## Performance in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/vrzBoNm.png)
+![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/bfSruAT.png)
 
 As expected **no lazy** is the fastest overall (because the computation is very cheap).
 
@@ -72,11 +80,13 @@ At `100%` we see that **lazy** incurs a 50x performance overhead. It is also som
 
 Because of the forgiving memory model of `i86` it turns out that the cost of **Flag (Trivial)** and **Flag (Protected)** is almost identical. This might not be true on `ARM` or `PowerPC`.
 
+Paul Westcott ([@manofstick](https://github.com/manofstick)) Lazzzy implementation does significantly better than the `Lazy<'T>` and according to Paul Lazzzy should replicate the full functionality of `Lazy<'T>` which my simpler flag based schemes don't.
+
 In all these cases we have no contention of the locks so the performance will look different in a concurrent environment with heavy contention. What is the cost of locks under contention? That is a topic for another blog post.
 
 ## Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/XcTkKv3.png)
+![Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/0G1MPBN.png)
 
 Collection count gives an indication on the number of objects allocated by the lazy implementations. Lower is better.
 

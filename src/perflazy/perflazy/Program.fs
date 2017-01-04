@@ -1,4 +1,105 @@
-﻿module PerformanceTests =
+module ManOfStick =
+  [<AbstractClass>]
+  type private LazyItem<'T>(isInitializer:bool, isValueCreated:bool) =
+      member __.IsInitializer  = isInitializer
+      member __.IsValueCreated = isValueCreated
+      abstract member Value : 'T
+
+  [<AbstractClass>]
+  type private LazyInitializer<'T>() =
+      inherit LazyItem<'T>(true, false)
+
+  type private LazyValue<'T>(t:'T) =
+      inherit LazyItem<'T>(false, true)
+      override __.Value = t
+
+  type private LazyException<'T>(e:System.Exception) =
+      inherit LazyItem<'T>(false, false)
+      override __.Value = raise e
+
+  type private LazyHelper<'T>() =
+      static let createInstanceFunc =
+          let construct () =
+              try
+                  System.Activator.CreateInstance typeof<'T> :?> 'T
+              with
+              | :? System.MissingMethodException ->
+                  let nicerException =
+#if MORE_REAL
+                      System.MissingMemberException(Environment.GetResourceString("Lazy_CreateValue_NoParameterlessCtorForT"))
+#else
+                      System.MissingMemberException "Lazy_CreateValue_NoParameterlessCtorForT"
+#endif
+                  raise nicerException
+
+          System.Func<'T> construct
+
+      static member createInstance = createInstanceFunc
+
+  module LazyHelper =
+      let getMode isThreadSafe =
+          if isThreadSafe then
+              System.Threading.LazyThreadSafetyMode.ExecutionAndPublication
+          else
+              System.Threading.LazyThreadSafetyMode.None
+
+  type Lazzzy<'T> private (valueFactory:System.Func<'T>, mode:System.Threading.LazyThreadSafetyMode, viaConstructor) =
+      [<VolatileField>]
+      let mutable lazyItem : LazyItem<'T> = Unchecked.defaultof<LazyItem<'T>>
+
+      let none () =
+          { new LazyInitializer<'T>() with
+              member __.Value =
+                  try
+                      let value = valueFactory.Invoke ()
+                      lazyItem <- LazyValue value
+                      value
+                  with
+                  | ex when not viaConstructor ->
+                      lazyItem <- LazyException ex
+                      reraise () }
+
+      let executionAndPublication () =
+          { new LazyInitializer<'T>() with
+              member self.Value =
+                  lock self (fun () ->
+                      if not lazyItem.IsInitializer then lazyItem.Value
+                      else
+                          try
+                              let value = valueFactory.Invoke ()
+                              lazyItem <- LazyValue value
+                              value
+                          with
+                          | ex when not viaConstructor ->
+                              lazyItem <- LazyException ex
+                              reraise () ) }
+
+      let publicationOnly () =
+          { new LazyInitializer<'T>() with
+              member self.Value =
+                  let value = LazyValue (valueFactory.Invoke ())
+                  System.Threading.Interlocked.CompareExchange (&lazyItem, value, self) |> ignore
+                  lazyItem.Value }
+
+      do
+          match mode with
+          | System.Threading.LazyThreadSafetyMode.ExecutionAndPublication -> lazyItem <- executionAndPublication ()
+          | System.Threading.LazyThreadSafetyMode.None                    -> lazyItem <- none                    ()
+          | System.Threading.LazyThreadSafetyMode.PublicationOnly         -> lazyItem <- publicationOnly         ()
+          | _ -> failwith "unknown System.Threading.LazyThreadSafetyMode"
+
+      new ()                          = Lazzzy<'T> (LazyHelper.createInstance, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication, true)
+      new (isThreadSafe)              = Lazzzy<'T> (LazyHelper.createInstance, LazyHelper.getMode isThreadSafe,                               true)
+      new (valueFactory)              = Lazzzy<'T> (valueFactory,              System.Threading.LazyThreadSafetyMode.ExecutionAndPublication, false)
+      new (valueFactory,isThreadSafe) = Lazzzy<'T> (valueFactory,              LazyHelper.getMode isThreadSafe,                               false)
+      new (valueFactory, mode)        = Lazzzy<'T> (valueFactory,              mode,                                                          false)
+      new (mode)                      = Lazzzy<'T> (LazyHelper.createInstance, mode,                                                          true)
+
+      member __.Value          = lazyItem.Value
+      member __.IsValueCreated = lazyItem.IsValueCreated
+
+
+module PerformanceTests =
   open FSharp.Core.Printf
 
   open System
@@ -404,6 +505,80 @@
 
       simple
 
+  module LazzzyProtectedExecutionAndPublicationPerf =
+    open ManOfStick
+    open System.Threading
+
+    let inline delay i                = Lazzzy<_> (Func<_> (fun () -> i), LazyThreadSafetyMode.ExecutionAndPublication)
+    let inline value (l : Lazzzy<_>)  = l.Value
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
+
+  module LazzzyProtectedPublicationPerf =
+    open ManOfStick
+    open System.Threading
+
+    let inline delay i                = Lazzzy<_> (Func<_> (fun () -> i), LazyThreadSafetyMode.PublicationOnly)
+    let inline value (l : Lazzzy<_>)  = l.Value
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
+
+  module LazzzyNoProtectionPerf =
+    open ManOfStick
+    open System.Threading
+
+    let inline delay i                = Lazzzy<_> (Func<_> (fun () -> i), LazyThreadSafetyMode.None)
+    let inline value (l : Lazzzy<_>)  = l.Value
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
 
   let run () =
 #if DEBUG
@@ -432,6 +607,9 @@
         "Lazy (Execution & Publication)"  , LazyProtectedExecutionAndPublicationPerf.createTestCases
         "Lazy (Publication)"              , LazyProtectedPublicationPerf.createTestCases
         "Lazy (None)"                     , LazyNoProtectionPerf.createTestCases
+        "Lazzzy (Execution & Publication)", LazzzyProtectedExecutionAndPublicationPerf.createTestCases
+        "Lazzzy (Publication)"            , LazzzyProtectedPublicationPerf.createTestCases
+        "Lazzzy (None)"                   , LazzzyNoProtectionPerf.createTestCases
         "Flag (Trivial)"                  , TrivialFlagPerf.createTestCases
         "Flag (Compact)"                  , CompactFlagPerf.createTestCases
         "Flag (Exception aware)"          , ExceptionAwareFlagPerf.createTestCases
