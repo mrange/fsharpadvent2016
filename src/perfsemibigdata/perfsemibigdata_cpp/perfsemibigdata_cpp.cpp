@@ -44,49 +44,84 @@ namespace
     using t = std::decay_t<T>;
     static_assert (std::is_pointer<t>::value || std::is_integral<t>::value , "std::is_pointer<t>::value || std::is_integral<t>::value");
 
-    auto w = (long long) (v);
+    auto w = (long long) v;
     auto z = (w / alignment + (w % alignment ? 1 : 0)) * alignment;
-    return (t) (z);
+    return (t) z;
   }
 
   struct avx
   {
-    constexpr static std::size_t const double_count  = 4;
-    constexpr static std::size_t const byte_count    = double_count * sizeof (double);
+    constexpr static std::size_t const stride     = 4;
+    constexpr static std::size_t const alignment  = stride * sizeof (double);
 
-    inline __m256d load (double const * p)
+    static inline __m256d load (double const * p)
     {
       return _mm256_load_pd (p);
     }
 
-    inline void store (double * p, __m256d v)
+    static inline void store (double * p, __m256d v)
     {
       return _mm256_store_pd (p, v);
     }
 
-    inline __m256d set (double v)
+    static inline __m256d set (double v)
     {
       return _mm256_set1_pd (v);
     }
 
-    inline __m256d add (__m256d a, __m256d b)
+    static inline __m256d add (__m256d a, __m256d b)
     {
       return _mm256_add_pd (a, b);
     }
-    
-    inline __m256d subtract (__m256d a, __m256d b)
+
+    static inline __m256d sub (__m256d a, __m256d b)
     {
       return _mm256_sub_pd (a, b);
     }
   };
 
+  struct sse2
+  {
+    constexpr static std::size_t const stride     = 2;
+    constexpr static std::size_t const alignment  = stride * sizeof (double);
+
+    static inline __m128d load (double const * p)
+    {
+      return _mm_load_pd (p);
+    }
+
+    static inline void store (double * p, __m128d v)
+    {
+      return _mm_store_pd (p, v);
+    }
+
+    static inline __m128d set (double v)
+    {
+      return _mm_set1_pd (v);
+    }
+
+    static inline __m128d add (__m128d a, __m128d b)
+    {
+      return _mm_add_pd (a, b);
+    }
+
+    static inline __m128d sub (__m128d a, __m128d b)
+    {
+      return _mm_sub_pd (a, b);
+    }
+  };
+
+  template<typename TAdapter>
   struct particles
   {
+    constexpr static std::size_t const stride     = TAdapter::stride ;
+    constexpr static std::size_t const alignment  = TAdapter::alignment   ;
+
     particles (std::size_t particle_count)
       : a_is_current    (true)
       , particle_count  (particle_count)
-      , a (particle_count + 4 + 4) // + 4 (if particle_count % 4 <> 0) + 4 (if alignment % 32 <> 0) 
-      , b (particle_count + 4 + 4) // + 4 (if particle_count % 4 <> 0) + 4 (if alignment % 32 <> 0) 
+      , a (particle_count + stride + stride) // + double_count (if particle_count % double_count <> 0) + double_count (if ptr % alignment <> 0)
+      , b (particle_count + stride + stride) // + double_count (if particle_count % double_count <> 0) + double_count (if ptr % alignment <> 0)
     {
     }
 
@@ -101,9 +136,9 @@ namespace
 
       a_is_current = !a_is_current;
 
-      verlet_axis (acceleration_x, current.x, previous.x);
-      verlet_axis (acceleration_y, current.y, previous.y);
-      verlet_axis (acceleration_z, current.z, previous.z);
+      verlet_axis (particle_count, acceleration_x, current.x, previous.x);
+      verlet_axis (particle_count, acceleration_y, current.y, previous.y);
+      verlet_axis (particle_count, acceleration_z, current.z, previous.z);
     }
 
     std::vector<vector3> current_vertices () const
@@ -127,29 +162,30 @@ namespace
     }
 
   private:
-    void verlet_axis (
-        double acceleration
+    static void verlet_axis (
+        std::size_t           particle_count
+      , double                acceleration
       , std::vector<double> & a
       , std::vector<double> & b
     )
     {
-      auto c_p = realign<32> (&a.front ());
-      auto p_p = realign<32> (&b.front ());
+      auto c_p = realign<alignment> (&a.front ());
+      auto p_p = realign<alignment> (&b.front ());
 
-      auto sz4 = realign<4> (particle_count) / 4;
+      auto sz = realign<stride> (particle_count) / stride;
 
-      for (auto iter = sz4; iter > 0; --iter)
+      for (auto iter = sz; iter > 0; --iter)
       {
         // p = c + c - p + acc
         //_mm_prefetch((const char*)(c_p + 8), _MM_HINT_NTA);
         //_mm_prefetch((const char*)(p_p + 8), _MM_HINT_NTA);
-        auto const c    = _mm256_load_pd (c_p);
-        auto const p    = _mm256_load_pd (p_p);
+        auto const c    = TAdapter::load (c_p);
+        auto const p    = TAdapter::load (p_p);
         auto old_p      = p_p;
-        c_p += 4;
-        p_p += 4;
-        auto const acc  = _mm256_set1_pd (acceleration);
-        _mm256_store_pd (old_p, _mm256_add_pd (_mm256_sub_pd (_mm256_add_pd (c, c), p), acc));
+        c_p += stride;
+        p_p += stride;
+        auto const acc  = TAdapter::set (acceleration);
+        TAdapter::store (old_p, TAdapter::add (TAdapter::sub (TAdapter::add (c, c), p), acc));
       }
     }
 
@@ -161,7 +197,7 @@ namespace
       positions (std::size_t particle_count)
       {
         assert (particle_count > 0);
-        assert (particle_count % 4 == 0);
+        assert (particle_count % double_count == 0);
         x.resize (particle_count);
         y.resize (particle_count);
         z.resize (particle_count);
@@ -174,7 +210,6 @@ namespace
 
     positions a;
     positions b;
-
   };
 
   std::size_t const inners [] = {100,110,120,132,145,159,175,192,210,231,254,278,305,335,368,404,443,486,534,586,643,705,774,850,933,1024,1123,1233,1353,1485,1630,1789,1963,2154,2364,2595,2848,3126,3430,3765,4132,4535,4977,5462,5995,6579,7221,7925,8697,9545,10476,11498,12619,13849,15199,16681,18307,20092,22051,24201,26561,29151,31993,35112,38535,42292,46416,50941,55908,61359,67342,73907,81113,89022,97701,107227,117681,129155,141747,155568,170735,187382,205651,225702,247708,271859,298365,327455,359381,394421,432876,475081,521401,572237,628029,689261,756463,830218,1000000};
@@ -203,18 +238,6 @@ namespace
 
 int main()
 {
-/*
-  std::printf ("Starting...\n");
-
-  ps.verlet (0, 1, 0);
-  ps.verlet (0, 0, 0);
-
-  auto vs   = ps.current_vertices ();
-  auto sum  = std::accumulate (vs.begin (), vs.end (), vector3::zero);
-
-  std::printf ("Sum: %f, %f, %f\n", sum.x, sum.y, sum.z);
-  */
-
   std::vector<double> results;
 
   for (auto inner : inners)
@@ -224,7 +247,7 @@ int main()
 
     std::printf ("Running test cases with outer=%zd, inner=%zd\n", outer, inner);
 
-    particles ps (inner);
+    particles<sse2> ps (inner);
 
     auto ms = time_it (outer, [&ps] { ps.verlet (0, 1, 0); });
     results.push_back (ms);
