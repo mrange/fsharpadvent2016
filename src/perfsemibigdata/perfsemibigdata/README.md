@@ -405,10 +405,16 @@ These are the different test cases we like to measure:
 0. **Hot & Cold (No Algebra)**                - Separated Hot & Cold into two arrays and avoids vector algebra
 0. **Structures of Arrays**                   - Uses `SOA` over `AOS`
 0. **Structures of Arrays (SIMD)**            - Uses `SOA` over `AOS` with .NET 4.6 SIMD Note; .NET SIMD only support single float precision so not exactly equivalent test.
+0. **Structures of Arrays (SSE2)**            - Uses `SOA` over `AOS` with C++ SSE2 intrinsics
+0. **Structures of Arrays (AVX)**             - Uses `SOA` over `AOS` with C++ AVX intrinsics
 
 ### Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
 
-![Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/yMhzGG1.png)
+![Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/b5WMpcU.png)
+
+### Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
+
+![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/uWh61Dw.png)
 
 We clearly see that **Class (Shuffle)** degrades a lot compared to the alternatives. This is because when the data no longer fits into the L3 cache **and** we access the data randomly we get no benefit of the prefetcher and the CPU has to wait a long time for data. We also see that the **Class (Shuffle)** starts degrading in several steps. This is because there is prefetching between L1, L2 and L3 as well.
 
@@ -426,9 +432,43 @@ In no other cases shuffling seems to effect performance negatively as expected.
 
 In order to easier estimate the order on how the performance depend on the data size I provide a chart where x-axis and y-axis is logarithmic
 
-### Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
+### **Update 2017-01-05**: Added C++ AVX and SSE results.
 
-![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/Xim9A9Q.png)
+Added results for **Structures of Arrays (SSE2)** and **Structures of Arrays (AVX)**.
+
+The assembler looks pretty good for (AVX)
+
+```asm
+; Note: AVX processes 4 doubles per operation
+; Load current x 4
+00007FF6E4ED14E0  vmovupd     ymm0,ymmword ptr [r10+rdx]
+; Load previous x 4
+00007FF6E4ED14E6  vmovupd     ymm1,ymmword ptr [rdx]
+; Save rdx for when storing result
+00007FF6E4ED14EA  mov         rax,rdx
+; Increment pointer
+00007FF6E4ED14ED  add         rdx,20h
+; current + current x 4
+00007FF6E4ED14F1  vaddpd      ymm0,ymm0,ymm0
+; - previous x 4
+00007FF6E4ED14F5  vsubpd      ymm1,ymm0,ymm1
+; + globalAccelerator x 4
+00007FF6E4ED14F9  vaddpd      ymm2,ymm1,ymm4
+; Store result x 4
+00007FF6E4ED14FD  vmovapd     ymmword ptr [rax],ymm2
+; Decrement counter
+00007FF6E4ED1501  sub         r8,1
+; If > 0 then loop
+00007FF6E4ED1505  jne         `anonymous namespace'::particles<`anonymous namespace'::avx>::verlet_axis+80h (07FF6E4ED14E0h)
+```
+
+The results are interesting. The AVX code is as expected doing really well but then surprisingly drops off sharply at 586 particles. My assumption is that we run out of L1 cache at this point but because we are hitting the band-width limit of L2 the prefetcher can't keep up. L1 peak rate seems to be around 74 GiB/second, when we hit L2 the rate falls to around 43 GiB/second)
+
+The reason AVX and SSE2 falls behind **Structures of Arrays (SIMD)** should be that the latter uses `float32` over `float` which means the band-width requirement is about half.
+
+### Performance in Milliseconds (Annotated), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
+
+![Performance in Milliseconds (Annotated), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/wluJ7GS.png)
 
 For **Class (Shuffle)** one sees three plateaus in the test data that are delimited by a linear growth of performance (as the axes are both logarithmic).
 
