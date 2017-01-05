@@ -323,7 +323,7 @@ In addition, the example avoids copying floats by letting positionsA and positio
 
 Another small optimization is to loop towards 0 as this saves a register which saves us loading the length from the stack if we run out of registers. The prefetcher fetches both before and after the address we accessed so it gives no negative impact on performance.
 
-Checking the jitted code we see that the end of loop checking is not really optimal
+Checking the jitted code we see that the end of loop checking is not optimal
 
 ```asm
 00007ffb`8aa04bc3 85ff            test    edi,edi
@@ -391,7 +391,7 @@ Since the jitter recognizes the SIMD types we can use vector algebra and avoid l
 00007ffb`8aa14ced eb96            jmp     00007ffb`8aa14c8a
 ```
 
-Apart from not preloading `globalAcceleration` into a `xmm2` and the slight suboptimal end of loop check it looks pretty good and we expect **Structures of Arrays (SIMD)** to do pretty good.
+Apart from not preloading `globalAcceleration` into a `xmm2` and the slight suboptimal end of loop check it looks good and we expect **Structures of Arrays (SIMD)** to do well.
 
 ## Measuring performance
 
@@ -436,7 +436,7 @@ In order to easier estimate the order on how the performance depend on the data 
 
 Added results for **Structures of Arrays (SSE2)** and **Structures of Arrays (AVX)**.
 
-The assembler looks pretty good for (AVX)
+The assembler code looks good for (AVX)
 
 ```asm
 ; Note: AVX processes 4 doubles per operation
