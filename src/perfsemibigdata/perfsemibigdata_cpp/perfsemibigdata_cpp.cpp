@@ -1,6 +1,3 @@
-// perfsemibigdata_cpp.cpp : Defines the entry point for the console application.
-//
-
 #include "stdafx.h"
 
 #include <cassert>
@@ -53,6 +50,7 @@ namespace
   {
     constexpr static std::size_t const stride     = 4;
     constexpr static std::size_t const alignment  = stride * sizeof (double);
+    constexpr static char const        name []    = "AVX";
 
     static inline __m256d load (double const * p)
     {
@@ -82,8 +80,9 @@ namespace
 
   struct sse2
   {
-    constexpr static std::size_t const stride     = 2;
-    constexpr static std::size_t const alignment  = stride * sizeof (double);
+    constexpr static std::size_t const  stride    = 2;
+    constexpr static std::size_t const  alignment = stride * sizeof (double);
+    constexpr static char const         name []   = "SSE2";
 
     static inline __m128d load (double const * p)
     {
@@ -234,33 +233,41 @@ namespace
     return us.count () / 1000.0;
   }
 
+  template<typename TAdapter>
+  void run ()
+  {
+    std::vector<double> results;
+
+    for (auto inner : inners)
+    {
+      std::size_t count = 10000000;
+      std::size_t outer = count / inner;
+
+      std::printf ("Running test cases with outer=%zd, inner=%zd\n", outer, inner);
+
+      particles<TAdapter> ps (inner);
+
+      auto ms = time_it (outer, [&ps] { ps.verlet (0, 1, 0); });
+      results.push_back (ms);
+
+      std::printf (" It tooks %f ms\n", ms);
+    }
+
+    printf ("Structures of Arrays (%s)", TAdapter::name);
+
+    for (auto ms : results)
+    {
+      printf (",%f", ms);
+    }
+
+    printf ("\n");
+  }
+
 }
 
 int main()
 {
-  std::vector<double> results;
-
-  for (auto inner : inners)
-  {
-    std::size_t count = 10000000;
-    std::size_t outer = count / inner;
-
-    std::printf ("Running test cases with outer=%zd, inner=%zd\n", outer, inner);
-
-    particles<sse2> ps (inner);
-
-    auto ms = time_it (outer, [&ps] { ps.verlet (0, 1, 0); });
-    results.push_back (ms);
-
-    std::printf (" It tooks %f ms\n", ms);
-  }
-
-  printf ("Structures of Arrays (AVX)");
-
-  for (auto ms : results)
-  {
-    printf (",%f", ms);
-  }
+  run<avx> ();
 
   return 0;
 }
