@@ -49,20 +49,45 @@ namespace
     return (t) (z);
   }
 
+  struct avx
+  {
+    constexpr static std::size_t const double_count  = 4;
+    constexpr static std::size_t const byte_count    = double_count * sizeof (double);
+
+    inline __m256d load (double const * p)
+    {
+      return _mm256_load_pd (p);
+    }
+
+    inline void store (double * p, __m256d v)
+    {
+      return _mm256_store_pd (p, v);
+    }
+
+    inline __m256d set (double v)
+    {
+      return _mm256_set1_pd (v);
+    }
+
+    inline __m256d add (__m256d a, __m256d b)
+    {
+      return _mm256_add_pd (a, b);
+    }
+    
+    inline __m256d subtract (__m256d a, __m256d b)
+    {
+      return _mm256_sub_pd (a, b);
+    }
+  };
+
   struct particles
   {
     particles (std::size_t particle_count)
       : a_is_current    (true)
       , particle_count  (particle_count)
+      , a (particle_count + 4 + 4) // + 4 (if particle_count % 4 <> 0) + 4 (if alignment % 32 <> 0) 
+      , b (particle_count + 4 + 4) // + 4 (if particle_count % 4 <> 0) + 4 (if alignment % 32 <> 0) 
     {
-      auto pc = particle_count + 4 + 4; // + 4 (if particle_count % 4 <> 0) + 4 (if alignment % 32 <> 0) 
-
-      a.x.resize (pc);
-      a.y.resize (pc);
-      a.z.resize (pc);
-      b.x.resize (pc);
-      b.y.resize (pc);
-      b.z.resize (pc);
     }
 
     void verlet (
@@ -133,6 +158,15 @@ namespace
 
     struct positions
     {
+      positions (std::size_t particle_count)
+      {
+        assert (particle_count > 0);
+        assert (particle_count % 4 == 0);
+        x.resize (particle_count);
+        y.resize (particle_count);
+        z.resize (particle_count);
+      }
+
       std::vector<double> x ;
       std::vector<double> y ;
       std::vector<double> z ;
