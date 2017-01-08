@@ -20,7 +20,7 @@ L3: 6MiB
 
 A simple way of thinking about the cost of reading data is that if reading from L1 has the cost of `1`, the cost of reading from L2 is `10`, the cost of reading from L3 is `100` and the cost of reading from RAM is `1000`.
 
-When we need to write highly performant code that process a lot of data we want to minimize the foot-print of the data to ensure as much as possible fits into the L1 cache and that we uses the band-width as efficiently as possible. Because of the prefetcher we should read data sequentially.
+When we need to write highly performant code that process a lot of data we want to minimize the foot-print of the data to ensure as much as possible fits into the L1 cache and that we uses the bandwidth as efficiently as possible. Because of the prefetcher we should read data sequentially.
 
 ## What is a lot of data?
 
@@ -270,7 +270,7 @@ The test case **Hot & Cold (No algebra)** should perform better thanks to this.
 
 Typically we create a class/struct and from that create an array that we iterate. This is somewhat comparable to `Row-Stores` in databases. Each row/array entry holds a full object. Many databases also supports `Column-Stores` as this is more efficient if you have lots of properties in an object but only accesses a few of them (like during report generation). We can apply the same approach to objects in memory which is called `Structures of Arrays (SOA)`. What we normally do is called `Arrays of Structures (AOS)`.
 
-This will give a near optimal usage of cache and band-width but we get extra overhead because we will need to dereferenc several arrays for each computation.
+This will give a near optimal usage of cache and bandwidth but we get extra overhead because we will need to dereferenc several arrays for each computation.
 
 For test case **Structures of Arrays** we implement it as this:
 
@@ -336,8 +336,7 @@ It would be better if it looked like this instead:
 
 ```asm
 00007ffb`8aa04bc7 ffcf            dec     edi
-00007ffb`8aa04bc3 85ff            test    edi,edi
-00007ffb`8aa04bc5 7e07            jge     00007ffb`8aa04b4a
+00007ffb`8aa04bc5 7e07            jne     00007ffb`8aa04b4a
 ```
 
 For tight loops this can make a difference. I suspect this is due to how tail recursion is unpacked in F# and should be possible to improve upon.
@@ -407,14 +406,14 @@ These are the different test cases we like to measure:
 0. **Structures of Arrays (SIMD)**            - Uses `SOA` over `AOS` with .NET 4.6 SIMD Note; .NET SIMD only support single float precision so not exactly equivalent test.
 0. **Structures of Arrays (SSE2)**            - Uses `SOA` over `AOS` with C++ SSE2 intrinsics
 0. **Structures of Arrays (AVX)**             - Uses `SOA` over `AOS` with C++ AVX intrinsics
-
+0. **Structures of Arrays (SIMD2)**           - Uses `SOA` over `AOS` with .NET 4.6 + System.Numerics.Vectors for 64 bit floats
 ### Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
 
-![Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/b5WMpcU.png)
+![Performance in Milliseconds, F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/xgTiuuw.png)
 
 ### Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
 
-![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/uWh61Dw.png)
+![Performance in Milliseconds (Logarithmic), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)](http://i.imgur.com/5hrkCwp.png)
 
 We clearly see that **Class (Shuffle)** degrades a lot compared to the alternatives. This is because when the data no longer fits into the L3 cache **and** we access the data randomly we get no benefit of the prefetcher and the CPU has to wait a long time for data. We also see that the **Class (Shuffle)** starts degrading in several steps. This is because there is prefetching between L1, L2 and L3 as well.
 
@@ -426,7 +425,7 @@ In no other cases shuffling seems to effect performance negatively as expected.
 
 **Hot & Cold (No Algebra)** does better because we managed to eliminate writes of intermediate results by refactoring the code.
 
-**Structures of Arrays** (both variants) does the best. As **Hot & Cold** doesn't degrade due to data starvation it sholdn't be because of more efficient use band-width. Instead, it's mainly because the way the code is written we avoid a method call for each particle. When we are calling a method we first marshalls the input arguments and then the method unmarshalls them. As the verlet computation is quite cheap the method call itself is taking some time.
+**Structures of Arrays** (both variants) does the best. As **Hot & Cold** doesn't degrade due to data starvation it sholdn't be because of more efficient use bandwidth. Instead, it's mainly because the way the code is written we avoid a method call for each particle. When we are calling a method we first marshalls the input arguments and then the method unmarshalls them. As the verlet computation is quite cheap the method call itself is taking some time.
 
 **Structures of Arrays (SIMD)** is the fastest alternative which we were expecting.
 
@@ -462,9 +461,64 @@ The assembler code looks good for (AVX)
 00007FF6E4ED1505  jne         `anonymous namespace'::particles<`anonymous namespace'::avx>::verlet_axis+80h (07FF6E4ED14E0h)
 ```
 
-The results are interesting. The AVX code is as expected doing really well but then surprisingly drops off sharply at 586 particles. My assumption is that we run out of L1 cache at this point but because we are hitting the band-width limit of L2 the prefetcher can't keep up. L1 peak rate seems to be around 74 GiB/second, when we hit L2 the rate falls to around 43 GiB/second)
+The results are interesting. The AVX code is as expected doing really well but then surprisingly drops off sharply at 586 particles. My assumption is that we run out of L1 cache at this point but because we are hitting the bandwidth limit of L2 the prefetcher can't keep up. L1 peak rate seems to be around 74 GiB/second, when we hit L2 the rate falls to around 43 GiB/second)
 
-The reason AVX and SSE2 falls behind **Structures of Arrays (SIMD)** should be that the latter uses `float32` over `float` which means the band-width requirement is about half.
+The reason AVX and SSE2 falls behind **Structures of Arrays (SIMD)** should be that the latter uses `float32` over `float` which means the bandwidth requirement is about half.
+
+### **Update 2017-01-08**: Added .NET 64 bit float SIMD results:
+
+As pointed out by **Jack Mott ([@jackmott](https://gist.github.com/jackmott))** there is actually 64 bit SIMD support in .NET. **Frank Niemeyer ([@FrankNiemeyer](https://gist.github.com/FrankNiemeyer))** pointed out that with basic types in SOA one should be able to make better use of SIMD.
+
+**Structures of Arrays (SIMD2)** makes use of 64 bit SIMD and basic types. The code processes each axis independently like this:
+
+```fsharp
+let rec loop globalAcceleration (a : Vector2 []) (b : Vector2 []) i =
+  let current   =   a.[i]
+  let previous  =   b.[i]
+  let next      =   current + current - previous + globalAcceleration
+  b.[i]         <-  next
+  if i > 0 then loop globalAcceleration a b (i - 1)
+```
+
+The assembler code looks decent:
+
+```asm
+; let current   =   a.[i]
+;   Array out of bounds?
+00007ffc`6cfd5190 3bc1            cmp     eax,ecx
+00007ffc`6cfd5192 733b            jae     00007ffc`6cfd51cf
+00007ffc`6cfd5194 4c63d8          movsxd  r11,eax
+00007ffc`6cfd5197 49c1e304        shl     r11,4
+;   Load current (two doubles) into xmm0
+00007ffc`6cfd519b 430f10441810    movups  xmm0,xmmword ptr [r8+r11+10h]
+; let previous  =   b.[i]
+;   Array out of bounds?
+00007ffc`6cfd51a1 413bc2          cmp     eax,r10d
+00007ffc`6cfd51a4 7329            jae     00007ffc`6cfd51cf
+00007ffc`6cfd51a6 4f8d5c1910      lea     r11,[r9+r11+10h]
+;   Load previous (two doubles) into xmm1
+00007ffc`6cfd51ab 410f100b        movups  xmm1,xmmword ptr [r11]
+; current + current
+00007ffc`6cfd51af 660f58c0        addpd   xmm0,xmm0
+; - previous
+00007ffc`6cfd51b3 660f5cc1        subpd   xmm0,xmm1
+; Load global accleration (two doubles) into xmm1
+00007ffc`6cfd51b7 0f100a          movups  xmm1,xmmword ptr [rdx]
+; + globalAcceleration
+00007ffc`6cfd51ba 660f58c1        addpd   xmm0,xmm1
+;   b.[i]         <-  next
+00007ffc`6cfd51be 410f1103        movups  xmmword ptr [r11],xmm0
+; End of loop?
+00007ffc`6cfd51c2 85c0            test    eax,eax
+00007ffc`6cfd51c4 7e04            jle     00007ffc`6cfd51ca
+; No, let's loop backwards
+00007ffc`6cfd51c6 ffc8            dec     eax
+00007ffc`6cfd51c8 ebc6            jmp     00007ffc`6cfd5190
+```
+
+Apart from unnecessary checking of array out of bounds and a inefficient loop check at the end the rest of the code looks ok.
+
+From the results we see that the performance of **Structures of Arrays (SIMD2)** is close **Structures of Arrays (SIMD)** at smaller data sets however since **Structures of Arrays (SIMD2)** uses 64 bit floats it seems we run out of main memory bandwidth at larger data sets. We reach a plateau at ~300,000 particles. **Structures of Arrays (SIMD)** should have the same plateau at ~600,000 particles (data size is half as big) but it seems the memory bandwidth can keep up and the performance remains constant for all data sizes.
 
 ### Performance in Milliseconds (Annotated), F# 4, .NET 4.6.2, X64 (256KiB L1, 1MiB L2, 6MiB L3)
 

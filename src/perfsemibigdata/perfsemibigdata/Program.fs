@@ -459,7 +459,7 @@
       verlet
 
   module StructuresOfArraysSIMDPerf =
-    open System.Numerics
+    type Vector3 = System.Numerics.Vector3
 
     let toVector3 (v : Vector)  = Vector3 (float32 v.X, float32 v.Y, float32 v.Z)
     let toVector  (v : Vector3) = Vector  (float   v.X, float   v.Y, float   v.Z)
@@ -525,6 +525,84 @@
 #endif
       verlet
 
+  module StructuresOfArraysSIMD2Perf =
+    type Vector2 = System.Numerics.Vector<float>
+
+    type Positions =
+      {
+        Xs : Vector2 []
+        Ys : Vector2 []
+        Zs : Vector2 []
+      }
+
+      static member New count : Positions =
+        {
+          Xs = Array.zeroCreate count
+          Ys = Array.zeroCreate count
+          Zs = Array.zeroCreate count
+        }
+
+    type Selection =
+      | A
+      | B
+    [<NoComparison>]
+    [<NoEquality>]
+    type Particles (timeStep, initParticles : InitParticle []) =
+      class
+        let count                     = initParticles.Length
+        let vectorCount               = (count + Vector2.Count - 1) / Vector2.Count
+
+        let masses      : float   []  = initParticles |> Array.map (fun ip -> ip.Mass)
+        let positionsA  : Positions   = Positions.New vectorCount
+        let positionsB  : Positions   = Positions.New vectorCount
+        let hotData     : HotData []  = Array.zeroCreate count
+        let coldData    : ColdData[]  = Array.zeroCreate count
+
+        let mutable selection = Selection.A
+
+        let rec loop globalAcceleration (a : Vector2 []) (b : Vector2 []) i =
+          let current   =   a.[i]
+          let previous  =   b.[i]
+          let next      =   current + current - previous + globalAcceleration
+          b.[i]         <-  next
+          if i > 0 then loop globalAcceleration a b (i - 1)
+
+        let verlet (globalAcceleration : Vector) (a : Positions) (b : Positions) =
+          loop (Vector2 globalAcceleration.X) a.Xs b.Xs (vectorCount - 1)
+          loop (Vector2 globalAcceleration.Y) a.Ys b.Ys (vectorCount - 1)
+          loop (Vector2 globalAcceleration.Z) a.Zs b.Zs (vectorCount - 1)
+
+        member x.Verlet globalAcceleration =
+          selection <-
+            match selection with
+            | Selection.A ->
+              verlet globalAcceleration positionsA positionsB
+              Selection.B
+            | Selection.B ->
+              verlet globalAcceleration positionsB positionsA
+              Selection.A
+
+        member x.Positions =
+          match selection with
+          | Selection.A -> positionsA
+          | Selection.B -> positionsB
+
+      end
+
+    let createTestCases initParticles shuffle =
+      let particles         = Particles (timeStep, initParticles)
+
+#if DEBUG
+      let verlet ()         =
+        let previous = particles.Positions |> debugSumBy id
+        particles.Verlet globalAcceleration
+        let current  = particles.Positions |> debugSumBy id
+        toVector previous, toVector current
+#else
+      let verlet ()         = particles.Verlet          globalAcceleration
+#endif
+      verlet
+
   let run () =
 #if DEBUG
     let count   = 1000000
@@ -567,6 +645,7 @@
         "Hot & Cold (No algebra)"           , HotAndCold2Perf.createTestCases
         "Structures of Arrays"              , StructuresOfArraysPerf.createTestCases
         "Structures of Arrays (SIMD)"       , StructuresOfArraysSIMDPerf.createTestCases
+        "Structures of Arrays (SIMD2)"      , StructuresOfArraysSIMD2Perf.createTestCases
       |]
 
     let random = Random.create 19740531

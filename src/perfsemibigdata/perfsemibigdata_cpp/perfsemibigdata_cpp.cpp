@@ -42,7 +42,7 @@ namespace
     static_assert (std::is_pointer<t>::value || std::is_integral<t>::value , "std::is_pointer<t>::value || std::is_integral<t>::value");
 
     auto w = (long long) v;
-    auto z = (w / alignment + (w % alignment ? 1 : 0)) * alignment;
+    auto z = ((w + alignment - 1) / alignment) * alignment;
     return (t) z;
   }
 
