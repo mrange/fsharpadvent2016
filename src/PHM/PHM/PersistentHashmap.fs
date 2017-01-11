@@ -84,6 +84,23 @@ open System.Collections.Generic
 type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() as self =
   static let emptyNode = EmptyNode<'K, 'V> () :> PersistentHashMap<'K, 'V>
 
+  static let rec arrayMapValuesLoop m (vs : PersistentHashMap<'K, 'V> []) (nvs : PersistentHashMap<'K, 'U> []) i =
+    // TODO: Find a more performant pattern
+    //  The way GC + arrays works is that when we write to an index JIT_WriteBarrier is called.
+    //  This slows down the mapping process. In other parts of the code we rely on System.Array native functions
+    //  for increased speed but unfortunately System.Array.ConvertAll is not native but an extension function
+    //  that doesn't have significant performance gain over the approach below.
+    if i < vs.Length then
+      nvs.[i] <- vs.[i].DoMapValues m
+      arrayMapValuesLoop m vs nvs (i + 1)
+
+  static let rec arrayMapKeyValuesLoop m (vs : KeyValueNode<'K, 'V> []) (nvs : KeyValueNode<'K, 'U> []) i =
+    // TODO: Find a more performant pattern
+    //  See arrayMapValuesLoop
+    if i < vs.Length then
+      nvs.[i] <- vs.[i].DoMapValues m :?> KeyValueNode<'K, 'U>
+      arrayMapKeyValuesLoop m vs nvs (i + 1)
+
   let createEnumerator () = new PersistentHashMapEnumerator<_, _> (self)
 
   interface IEnumerable<KeyValuePair<'K,'V>> with
@@ -98,6 +115,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   abstract DoSet            : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
   abstract DoTryFind        : uint32*int*'K*byref<'V> -> bool
   abstract DoUnset          : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
+  abstract DoMapValues      : ('V -> 'U) -> PersistentHashMap<'K, 'U>
   abstract DoGetChild       : int*byref<PersistentHashMap<'K, 'V>> -> bool
 
   default  x.DoIsEmpty ()   = false
@@ -117,6 +135,8 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   member x.Unset   k  =
     let h = hashOf k
     x.DoUnset h 0 k
+  member x.MapValues m =
+    x.DoMapValues m
 
   static member internal Empty = emptyNode
 
@@ -130,18 +150,29 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     else
       upcast BitmapNode1 (b1, PersistentHashMap<_, _>.FromTwoNodes (shift + TrieShift) h1 n1 h2 n2)
 
+  static member internal ArrayMapValues m (vs : _ []) =
+    let nvs = Array.zeroCreate vs.Length
+    arrayMapValuesLoop m vs nvs 0
+    nvs
+
+  static member internal ArrayMapKeyValues m (vs : _ []) =
+    let nvs = Array.zeroCreate vs.Length
+    arrayMapKeyValuesLoop m vs nvs 0
+    nvs
+
 and [<Sealed>] internal EmptyNode<'K, 'V when 'K :> System.IEquatable<'K>>() =
   inherit PersistentHashMap<'K, 'V>()
 
 #if PHM_TEST_BUILD
   override x.DoCheckInvariant h s d = d < TrieMaxLevel
 #endif
-  override x.DoVisit    r             = true
-  override x.DoIsEmpty  ()            = true
-  override x.DoSet      h s kv        = upcast kv
-  override x.DoTryFind  (h, s, k, rv) = false
-  override x.DoUnset    h s k         = PersistentHashMap<'K, 'V>.Empty
-  override x.DoGetChild (i, phm)      = false
+  override x.DoVisit      r             = true
+  override x.DoIsEmpty    ()            = true
+  override x.DoSet        h s kv        = upcast kv
+  override x.DoTryFind    (h, s, k, rv) = false
+  override x.DoUnset      h s k         = PersistentHashMap<'K, 'V>.Empty
+  override x.DoMapValues  m             = PersistentHashMap<'K, 'U>.Empty
+  override x.DoGetChild (i, phm)        = false
 
 and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint32, key : 'K, value : 'V) =
   inherit PersistentHashMap<'K, 'V>()
@@ -176,6 +207,8 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
       PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
+  override x.DoMapValues m =
+    upcast KeyValueNode (hash, key, m value)
   override x.DoGetChild (i, phm)    =
     false
 
@@ -216,6 +249,8 @@ and [<Sealed>] internal BitmapNode1<'K, 'V when 'K :> System.IEquatable<'K>>(bit
         PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
+  override x.DoMapValues m =
+    upcast BitmapNode1 (bitmap, node.DoMapValues m)
   override x.DoGetChild (i, phm)    =
     if i = 0 then
       phm <- node
@@ -297,6 +332,8 @@ and [<Sealed>] internal BitmapNodeN<'K, 'V when 'K :> System.IEquatable<'K>>(bit
           PersistentHashMap<'K, 'V>.Empty
     else
       upcast x
+  override x.DoMapValues m =
+    upcast BitmapNodeN (bitmap, PersistentHashMap<'K, 'V>.ArrayMapValues m nodes)
   override x.DoGetChild (i, phm)    =
     if i < nodes.Length then
       phm <- nodes.[i]
@@ -352,6 +389,8 @@ and [<Sealed>] internal BitmapNode16<'K, 'V when 'K :> System.IEquatable<'K>>(no
     else
       let nns = copyArrayRemoveHole localIdx nodes
       upcast BitmapNodeN (~~~bit, nns)
+  override x.DoMapValues m =
+    upcast BitmapNode16 (PersistentHashMap<'K, 'V>.ArrayMapValues m nodes)
   override x.DoGetChild (i, phm)    =
     if i < nodes.Length then
       phm <- nodes.[i]
@@ -441,6 +480,8 @@ and [<Sealed>] internal HashCollisionNodeN<'K, 'V when 'K :> System.IEquatable<'
         upcast x
     else
       upcast x
+  override x.DoMapValues m =
+    upcast HashCollisionNodeN (hash, PersistentHashMap<'K, 'V>.ArrayMapKeyValues m keyValues)
   override x.DoGetChild (i, phm)    =
     if i < keyValues.Length then
       phm <- keyValues.[i]
