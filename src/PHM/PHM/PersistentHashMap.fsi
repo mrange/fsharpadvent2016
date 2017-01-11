@@ -36,7 +36,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     member Set            : k : 'K -> v : 'V -> PersistentHashMap<'K, 'V>
     member TryFind        : k : 'K*[<Out>] rv : byref<'V> -> bool
     member Unset          : k : 'K -> PersistentHashMap<'K, 'V>
-    member MapValues      : m : ('V -> 'U) -> PersistentHashMap<'K, 'U>
+    member MapValues      : m : ('K -> 'V -> 'U) -> PersistentHashMap<'K, 'U>
 
     interface IEnumerable<KeyValuePair<'K,'V>>
 
@@ -49,7 +49,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     abstract internal DoSet       : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
     abstract internal DoTryFind   : uint32*int*'K*byref<'V> -> bool
     abstract internal DoUnset     : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
-    abstract internal DoMapValues : ('V -> 'U) -> PersistentHashMap<'K, 'U>
+    abstract internal DoMapValues : FSharp.Core.OptimizedClosures.FSharpFunc<'K, 'V, 'U> -> PersistentHashMap<'K, 'U>
     abstract internal DoGetChild  : int*byref<PersistentHashMap<'K, 'V>> -> bool
   end
 and [<Sealed>] internal KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>> =

@@ -58,5 +58,5 @@ module PersistentHashMap =
     visit (fun k v -> incr l; true) m |> ignore
     !l
 
-  let inline mapValues (f : 'V -> 'U) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'U> =
+  let inline mapValues (f : 'K -> 'V -> 'U) (m : PersistentHashMap<'K, 'V>) : PersistentHashMap<'K, 'U> =
     m.MapValues f

@@ -81,6 +81,8 @@ open Details
 
 open System.Collections.Generic
 
+open FSharp.Core.OptimizedClosures
+
 type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() as self =
   static let emptyNode = EmptyNode<'K, 'V> () :> PersistentHashMap<'K, 'V>
 
@@ -115,7 +117,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
   abstract DoSet            : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
   abstract DoTryFind        : uint32*int*'K*byref<'V> -> bool
   abstract DoUnset          : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
-  abstract DoMapValues      : ('V -> 'U) -> PersistentHashMap<'K, 'U>
+  abstract DoMapValues      : FSharpFunc<'K, 'V, 'U> -> PersistentHashMap<'K, 'U>
   abstract DoGetChild       : int*byref<PersistentHashMap<'K, 'V>> -> bool
 
   default  x.DoIsEmpty ()   = false
@@ -136,6 +138,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     let h = hashOf k
     x.DoUnset h 0 k
   member x.MapValues m =
+    let m = FSharpFunc<_, _, _>.Adapt m
     x.DoMapValues m
 
   static member internal Empty = emptyNode
@@ -208,7 +211,7 @@ and [<Sealed>] KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>>(hash : uint
     else
       upcast x
   override x.DoMapValues m =
-    upcast KeyValueNode (hash, key, m value)
+    upcast KeyValueNode (hash, key, m.Invoke (key, value))
   override x.DoGetChild (i, phm)    =
     false
 

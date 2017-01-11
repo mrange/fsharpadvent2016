@@ -240,8 +240,8 @@ module FsPropertyTests =
       loop Map.empty PersistentHashMap.empty 0
 
     static member ``PHM mapValues must contain all added and mapped values`` (vs : (int*int) []) =
-      let expected    = uniqueKey vs |> Array.map (fun (k, v) -> k, int64 v + 1L)
-      let phm         = vs |> fromArray |> PersistentHashMap.mapValues (fun v -> int64 v + 1L)
+      let expected    = uniqueKey vs |> Array.map (fun (k, v) -> k, int64 k + int64 v + 1L)
+      let phm         = vs |> fromArray |> PersistentHashMap.mapValues (fun k v -> int64 k + int64 v + 1L)
       let actualArray = phm |> toSortedKeyArray (PersistentHashMap.toArray)
 
       notIdentical expected  actualArray
