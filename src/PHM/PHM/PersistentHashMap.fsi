@@ -14,7 +14,7 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------------------
 
-// Inspired by Clojure's Persistent Hash Map (https://github.com/clojure/clojure/blob/master/src/jvm/clojure/lang/PersistentHashMap.java)
+// Inspired by Clojure's Persistent Hash Map https://github.com/clojure/clojure/blob/master/src/jvm/clojure/lang/PersistentHashMap.java)
 //  and Phil Bagwell's Ideal Hash Trie (http://lampwww.epfl.ch/papers/idealhashtrees.pdf)
 //  and http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 
@@ -36,6 +36,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     member Set            : k : 'K -> v : 'V -> PersistentHashMap<'K, 'V>
     member TryFind        : k : 'K*[<Out>] rv : byref<'V> -> bool
     member Unset          : k : 'K -> PersistentHashMap<'K, 'V>
+    member MapValues      : m : ('K -> 'V -> 'U) -> PersistentHashMap<'K, 'U>
 
     interface IEnumerable<KeyValuePair<'K,'V>>
 
@@ -48,6 +49,7 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
     abstract internal DoSet       : uint32  -> int  -> KeyValueNode<'K, 'V> -> PersistentHashMap<'K, 'V>
     abstract internal DoTryFind   : uint32*int*'K*byref<'V> -> bool
     abstract internal DoUnset     : uint32  -> int  -> 'K -> PersistentHashMap<'K, 'V>
+    abstract internal DoMapValues : FSharp.Core.OptimizedClosures.FSharpFunc<'K, 'V, 'U> -> PersistentHashMap<'K, 'U>
     abstract internal DoGetChild  : int*byref<PersistentHashMap<'K, 'V>> -> bool
   end
 and [<Sealed>] internal KeyValueNode<'K, 'V when 'K :> System.IEquatable<'K>> =

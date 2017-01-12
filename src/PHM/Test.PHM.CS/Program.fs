@@ -160,7 +160,6 @@ module FsPropertyTests =
       && expected = actualSeq
       && expected = actualArray
 
-
     static member ``PHM TryFind must return all added values`` (vs : (ComplexType*ComplexType) []) =
       let unique    = uniqueKey vs
       let phm       = unique |> fromArray
@@ -240,6 +239,15 @@ module FsPropertyTests =
 
       loop Map.empty PersistentHashMap.empty 0
 
+    static member ``PHM mapValues must contain all added and mapped values`` (vs : (int*int) []) =
+      let expected    = uniqueKey vs |> Array.map (fun (k, v) -> k, int64 k + int64 v + 1L)
+      let phm         = vs |> fromArray |> PersistentHashMap.mapValues (fun k v -> int64 k + int64 v + 1L)
+      let actualArray = phm |> toSortedKeyArray (PersistentHashMap.toArray)
+
+      notIdentical expected  actualArray
+      && checkInvariant phm
+      && expected = actualArray
+
   open FsCheck
 
   let testLongInsert () =
@@ -252,6 +260,7 @@ module FsPropertyTests =
     printfn "testLongInsert: count:%d, multiplier:%d" count multiplier
     let random      = makeRandom 19740531
     let inserts     = [| for x in 1..count -> random 0 (count * multiplier) |]
+    let lookups     = shuffle random inserts
     let removals    = shuffle random inserts
 
     let mutable phm = PersistentHashMap.empty
@@ -267,6 +276,20 @@ module FsPropertyTests =
         failwith "testLongInsert/insert/checkInvariant failed"
 #endif
 
+    if phm.IsEmpty then
+      failwith "testLongInsert/postInsert/checkEmpty failed"
+
+    if phm |> checkInvariant |> not then
+      failwith "testLongInsert/postInsert/checkInvariant failed"
+
+    for l in lookups do
+      match phm |> PersistentHashMap.tryFind l with
+      | Some v when v = l -> ()
+      | _                 -> failwith "testLongInsert/lookup/tryFind failed"
+
+    if phm |> checkInvariant |> not then
+      failwith "testLongInsert/postLookup/checkInvariant failed"
+
     for r in removals do
       phm <- phm |> PersistentHashMap.unset r
       match phm |> PersistentHashMap.tryFind r with
@@ -277,6 +300,12 @@ module FsPropertyTests =
       if phm |> checkInvariant |> not then
         failwith "testLongInsert/remove/checkInvariant failed"
 #endif
+
+    if phm |> checkInvariant |> not then
+      failwith "testLongInsert/postRemove/checkInvariant failed"
+
+    if phm.IsEmpty |> not then
+      failwith "testLongInsert/postRemove/checkEmpty failed"
 
     printfn "  Done"
 
@@ -450,6 +479,7 @@ module PropertyTests =
     printfn "testLongInsert: count:%d, multiplier:%d" count multiplier
     let random      = makeRandom 19740531
     let inserts     = [| for x in 1..count -> random 0 (count * multiplier) |]
+    let lookups     = shuffle random inserts
     let removals    = shuffle random inserts
 
     let mutable phm = empty ()
@@ -465,6 +495,20 @@ module PropertyTests =
         failwith "testLongInsert/insert/checkInvariant failed"
 #endif
 
+    if phm.IsEmpty then
+      failwith "testLongInsert/postInsert/checkEmpty failed"
+
+    if phm |> checkInvariant |> not then
+      failwith "testLongInsert/postInsert/checkInvariant failed"
+
+    for l in lookups do
+      match phm.TryFind l with
+      | true, v when v = l  -> ()
+      | _                   -> failwith "testLongInsert/lookup/tryFind failed"
+
+    if phm |> checkInvariant |> not then
+      failwith "testLongInsert/postLookup/checkInvariant failed"
+
     for r in removals do
       phm <- phm.Unset r
       match phm.TryFind r with
@@ -475,6 +519,12 @@ module PropertyTests =
       if phm |> checkInvariant |> not then
         failwith "testLongInsert/remove/checkInvariant failed"
 #endif
+
+    if phm |> checkInvariant |> not then
+      failwith "testLongInsert/postRemove/checkInvariant failed"
+
+    if phm.IsEmpty |> not then
+      failwith "testLongInsert/postRemove/checkEmpty failed"
 
     printfn "  Done"
 
