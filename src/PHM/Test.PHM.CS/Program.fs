@@ -330,6 +330,9 @@ module PropertyTests =
     phm.Visit (System.Func<_, _, _> visitor) |> ignore
     l
 
+  let mapValues (m : 'K -> 'V -> 'U) (phm : PersistentHashMap<_, _>) =
+    phm.MapValues (System.Func<_, _, _> m)
+
   let uniqueKey vs =
     vs
     |> FsLinq.groupBy fst
@@ -468,6 +471,15 @@ module PropertyTests =
           true
 
       loop Map.empty (empty ()) 0
+
+    static member ``PHM mapValues must contain all added and mapped values`` (vs : (int*int) []) =
+      let expected    = uniqueKey vs |> Array.map (fun (k, v) -> k, int64 k + int64 v + 1L)
+      let phm         = vs |> fromArray |> mapValues (fun k v -> int64 k + int64 v + 1L)
+      let actualArray = phm |> toSortedKeyArray
+
+      notIdentical expected  actualArray
+      && checkInvariant phm
+      && expected = actualArray
 
   let testLongInsert () =
 #if DEBUG

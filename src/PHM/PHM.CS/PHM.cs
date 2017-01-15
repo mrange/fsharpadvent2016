@@ -74,6 +74,8 @@ namespace PHM.CS
       return Unset ((uint)k.GetHashCode (), 0, k) ?? EmptyNode;
     }
 
+    public abstract PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m);
+
 #if PHM_TEST_BUILD
     public bool CheckInvariant ()
     {
@@ -106,9 +108,9 @@ namespace PHM.CS
       return false;
     }
     internal abstract bool                      Receive         (Func<K, V, bool> r);
-    internal abstract PersistentHashMap<K, V>  Set             (uint h, int s, PersistentHashMap.KeyValueNode<K, V> n);
+    internal abstract PersistentHashMap<K, V>   Set             (uint h, int s, PersistentHashMap.KeyValueNode<K, V> n);
     internal abstract bool                      TryFind         (uint h, int s, K k, out V v);
-    internal abstract PersistentHashMap<K, V>  Unset           (uint h, int s, K k);
+    internal abstract PersistentHashMap<K, V>   Unset           (uint h, int s, K k);
   }
 
   static partial class PersistentHashMap
@@ -214,6 +216,32 @@ namespace PHM.CS
       return nvs;
     }
 
+    internal static PersistentHashMap<K, U>[] ArrayMapValues<K, V, U> (Func<K, V, U> m, PersistentHashMap<K, V>[] vs)
+      where K : IEquatable<K>
+    {
+      var result = new PersistentHashMap<K, U>[vs.Length];
+
+      for (var iter = 0; iter < vs.Length; ++iter)
+      {
+        result[iter] = vs[iter].MapValues (m);
+      }
+
+      return result;
+    }
+
+    internal static KeyValueNode<K, U>[] ArrayMapKeyValues<K, V, U> (Func<K, V, U> m, KeyValueNode<K, V>[] vs)
+      where K : IEquatable<K>
+    {
+      var result = new KeyValueNode<K, U>[vs.Length];
+
+      for (var iter = 0; iter < vs.Length; ++iter)
+      {
+        result[iter] = (KeyValueNode<K, U>)vs[iter].MapValues (m);
+      }
+
+      return result;
+    }
+
     internal sealed partial class EmptyNode<K, V> : PersistentHashMap<K, V>
       where K : IEquatable<K>
     {
@@ -257,6 +285,11 @@ namespace PHM.CS
       internal override PersistentHashMap<K, V> Unset (uint h, int s, K k)
       {
         return null;
+      }
+
+      public override PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m)
+      {
+        return PersistentHashMap<K, U>.EmptyNode;
       }
     }
 
@@ -344,6 +377,11 @@ namespace PHM.CS
         {
           return this;
         }
+      }
+
+      public override PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m)
+      {
+        return new KeyValueNode<K, U> (Hash, Key, m (Key, Value));
       }
     }
 
@@ -466,6 +504,11 @@ namespace PHM.CS
         {
           return this;
         }
+      }
+
+      public override PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m)
+      {
+        return new BitmapNode1<K, U> (Bitmap, Node.MapValues (m));
       }
     }
 
@@ -662,6 +705,11 @@ namespace PHM.CS
           return this;
         }
       }
+
+      public override PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m)
+      {
+        return new BitmapNodeN<K, U> (Bitmap, ArrayMapValues (m, Nodes));
+      }
     }
 
     internal sealed partial class BitmapNode16<K, V> : PersistentHashMap<K, V>
@@ -773,6 +821,11 @@ namespace PHM.CS
           var bit = Bit (h, s);
           return new BitmapNodeN<K, V> (0xFFFF & ~bit, CopyArrayRemoveHole (localIdx, Nodes));
         }
+      }
+
+      public override PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m)
+      {
+        return new BitmapNode16<K, U> (ArrayMapValues (m, Nodes));
       }
     }
 
@@ -935,6 +988,11 @@ namespace PHM.CS
         {
           return this;
         }
+      }
+
+      public override PersistentHashMap<K, U> MapValues<U> (Func<K, V, U> m)
+      {
+        return new HashCollisionNodeN<K, U> (Hash, ArrayMapKeyValues (m, KeyValues));
       }
     }
   }
