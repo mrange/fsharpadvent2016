@@ -59,6 +59,9 @@ These are the alternatives I selected:
 0. **Lazzzy (Execution & Publication)**  - Paul Westcott ([@manofstick](https://github.com/manofstick)) provided his implementation of Lazy semantics (called Lazzzy).
 0. **Lazzzy (Publication)**              - -"-
 0. **Lazzzy (None)**                     - -"-
+0. **NewLazy (Execution & Publication)**  - Paul Westcott ([@manofstick](https://github.com/manofstick)) is working on a [PR for .NET Core](https://github.com/dotnet/coreclr/pull/8963). I wanted to include performance numbers for the updated `Lazy` class.
+0. **NewLazy (Publication)**              - -"-
+0. **NewLazy (None)**                     - -"-
 0. **Flag (Trivial)**                  - A lazy implementation using a simple unprotected flag to decide whether a value is computed or not. Doesn't cache exceptions.
 0. **Flag (Compact)**                  - A lazy implementation letting the value act both value and flag. Doesn't cache exceptions.
 0. **Flag (Exception aware)**           - A lazy implementation using a simple unprotected flag to decide whether a value is computed or not. Does cache exceptions.
@@ -68,7 +71,7 @@ These are the alternatives I selected:
 
 ## Performance in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/bfSruAT.png)
+![Performance in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/Aoz3t6H.png)
 
 As expected **no lazy** is the fastest overall (because the computation is very cheap).
 
@@ -86,7 +89,7 @@ In all these cases we have no contention of the locks so the performance will lo
 
 ## Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64
 
-![Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/0G1MPBN.png)
+![Collection Count in Milliseconds - F# 4, .NET 4.6.2, x64](http://i.imgur.com/mef4bHk.png)
 
 Collection count gives an indication on the number of objects allocated by the lazy implementations. Lower is better.
 

@@ -580,6 +580,83 @@ module PerformanceTests =
 
       simple
 
+
+  module NewLazyProtectedExecutionAndPublicationPerf =
+    open NewLazy
+    open System.Threading
+
+    let inline delay i                = Lazy<_> (Func<_> (fun () -> i), LazyThreadSafetyMode.ExecutionAndPublication)
+    let inline value (l : Lazy<_>)    = l.Value
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
+
+  module NewLazyProtectedPublicationPerf =
+    open NewLazy
+    open System.Threading
+
+    let inline delay i                = Lazy<_> (Func<_> (fun () -> i), LazyThreadSafetyMode.PublicationOnly)
+    let inline value (l : Lazy<_>)    = l.Value
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
+
+  module NewLazyNoProtectionPerf =
+    open NewLazy
+    open System.Threading
+
+    let inline delay i                = Lazy<_> (Func<_> (fun () -> i), LazyThreadSafetyMode.None)
+    let inline value (l : Lazy<_>)    = l.Value
+
+    let createTestCases count ratio =
+      let rec simpleLoop l r s i =
+        if i < count then
+          let r = r + ratio
+          if r >= 1. then
+            let r = r - 1.
+            let l = delay i
+            simpleLoop l r (s + value l) (i + 1)
+          else
+            simpleLoop l r (s + value l) (i + 1)
+        else
+          s
+
+      let simple () =
+        simpleLoop (delay 0) 0. 0 0
+
+      simple
+
+
   let run () =
 #if DEBUG
     let count   = 100
@@ -602,20 +679,23 @@ module PerformanceTests =
 
     let testCases =
       [|
-        "no lazy"                         , NoLazyPerf.createTestCases
-        "lazy"                            , LazyPerf.createTestCases
-        "Lazy (Execution & Publication)"  , LazyProtectedExecutionAndPublicationPerf.createTestCases
-        "Lazy (Publication)"              , LazyProtectedPublicationPerf.createTestCases
-        "Lazy (None)"                     , LazyNoProtectionPerf.createTestCases
-        "Lazzzy (Execution & Publication)", LazzzyProtectedExecutionAndPublicationPerf.createTestCases
-        "Lazzzy (Publication)"            , LazzzyProtectedPublicationPerf.createTestCases
-        "Lazzzy (None)"                   , LazzzyNoProtectionPerf.createTestCases
-        "Flag (Trivial)"                  , TrivialFlagPerf.createTestCases
-        "Flag (Compact)"                  , CompactFlagPerf.createTestCases
-        "Flag (Exception aware)"          , ExceptionAwareFlagPerf.createTestCases
-        "Flag (Protected)"                , ProtectedFlagPerf.createTestCases
-        "Flag (Full protection)"          , FullProtectionFlagPerf.createTestCases
-        "Flag (Full protection w. DC)"    , FullProtectionFlag2Perf.createTestCases
+        "no lazy"                           , NoLazyPerf.createTestCases
+        "lazy"                              , LazyPerf.createTestCases
+        "Lazy (Execution & Publication)"    , LazyProtectedExecutionAndPublicationPerf.createTestCases
+        "Lazy (Publication)"                , LazyProtectedPublicationPerf.createTestCases
+        "Lazy (None)"                       , LazyNoProtectionPerf.createTestCases
+        "Lazzzy (Execution & Publication)"  , LazzzyProtectedExecutionAndPublicationPerf.createTestCases
+        "Lazzzy (Publication)"              , LazzzyProtectedPublicationPerf.createTestCases
+        "Lazzzy (None)"                     , LazzzyNoProtectionPerf.createTestCases
+        "NewLazy (Execution & Publication)" , NewLazyProtectedExecutionAndPublicationPerf.createTestCases
+        "NewLazy (Publication)"             , NewLazyProtectedPublicationPerf.createTestCases
+        "NewLazy (None)"                    , NewLazyNoProtectionPerf.createTestCases
+        "Flag (Trivial)"                    , TrivialFlagPerf.createTestCases
+        "Flag (Compact)"                    , CompactFlagPerf.createTestCases
+        "Flag (Exception aware)"            , ExceptionAwareFlagPerf.createTestCases
+        "Flag (Protected)"                  , ProtectedFlagPerf.createTestCases
+        "Flag (Full protection)"            , FullProtectionFlagPerf.createTestCases
+        "Flag (Full protection w. DC)"      , FullProtectionFlag2Perf.createTestCases
       |]
     let results = ResizeArray 16
 
