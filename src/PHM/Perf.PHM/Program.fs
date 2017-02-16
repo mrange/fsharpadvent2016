@@ -324,11 +324,11 @@
     open Prime
 
     let createTestCases lookups inserts removals = 
-      let inline containsKey  k   m = Vmap.containsKey k   m
-      let inline length           m = Vmap.toSeq           m |> Seq.length
-      let inline isEmpty          m = Vmap.isEmpty         m
-      let inline set          k v m = Vmap.add         k v m
-      let inline unset        k   m = Vmap.remove      k   m
+      let inline containsKey  k   m = HMap.containsKey k   m
+      let inline length           m = HMap.toSeq           m |> Seq.length
+      let inline isEmpty          m = HMap.isEmpty         m
+      let inline set          k v m = HMap.add         k v m
+      let inline unset        k   m = HMap.remove      k   m
 
       let inline doInsert phm =
         let rec loop phm i =
@@ -357,7 +357,7 @@
             true
         loop 0
 
-      let empty     = Vmap.makeEmpty ()
+      let empty     = HMap.makeEmpty ()
 
       let inserted  = doInsert empty
 
@@ -505,10 +505,9 @@
 
     let testCases =
       [|
-        "Persistent Hash Map (C#)"      , CsPersistentHashMap.createTestCases
         "Persistent Hash Map (F#)"      , FsPersistentHashMap.createTestCases
         "FSharpx.Collections"           , FSharpx.createTestCases
-        "Prime.Vmap"                    , PrimeVmap.createTestCases
+        "Prime.HMap"                    , PrimeVmap.createTestCases
         "Imms.ImmMap"                   , ImmsImmMap.createTestCases
         "System.Collections.Immutable"  , SCI.createTestCases
         "Map (F#)"                      , FsMap.createTestCases
