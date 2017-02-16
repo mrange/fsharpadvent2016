@@ -736,21 +736,21 @@ module PerformanceTests =
 
     let inline doInsert phm =
       inserts
-      |> Array.fold (fun s (k, v) -> Vmap.add k v s) phm
+      |> Array.fold (fun s (k, v) -> HMap.add k v s) phm
 
     let inline doRemove phm =
       removals
-      |> Array.fold (fun s (k, v) -> Vmap.remove k s) phm
+      |> Array.fold (fun s (k, v) -> HMap.remove k s) phm
 
     let inline doLookup fa phm =
       fa
-      |> Array.forall (fun (k, _) -> Vmap.containsKey k phm)
+      |> Array.forall (fun (k, _) -> HMap.containsKey k phm)
 
-    let empty     = Vmap.makeEmpty ()
+    let empty     = HMap.makeEmpty ()
 
     let inserted  = doInsert empty
 
-    let length vm = vm |> Vmap.toSeq |> Seq.length
+    let length vm = vm |> HMap.toSeq |> Seq.length
 
     let insert () =
       let result    = doInsert empty
@@ -758,12 +758,12 @@ module PerformanceTests =
 
     let remove () =
       let result    = doRemove inserted
-      Checker.check (fun () -> Vmap.isEmpty result) "Expected to be empty"
+      Checker.check (fun () -> HMap.isEmpty result) "Expected to be empty"
 
     let insertAndRemove () =
       let inserted  = doInsert empty
       let result    = doRemove inserted
-      Checker.check (fun () -> Vmap.isEmpty result) "Expected to be empty"
+      Checker.check (fun () -> HMap.isEmpty result) "Expected to be empty"
 
     let insertAndLookup () =
       let inserted  = doInsert empty
