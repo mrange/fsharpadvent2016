@@ -115,7 +115,7 @@ namespace PHM.CS
 
   static partial class PersistentHashMap
   {
-    internal static PersistentHashMap<K, V> Empty<K, V> ()
+    public static PersistentHashMap<K, V> Empty<K, V> ()
       where K : IEquatable<K>
     {
       return PersistentHashMap<K ,V>.EmptyNode;
