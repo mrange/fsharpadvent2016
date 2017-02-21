@@ -95,9 +95,6 @@ module Operators =
     /// Get the value of a property.
     let inline getPropertyValue indices (p : PropertyInfo) (x : obj) = p.GetValue (x, indices)
 
-    /// Test for equality, usually faster than (=).
-    let inline fastEq (x : 'a) (y : 'a) = LanguagePrimitives.GenericEquality x y
-
     /// Test for reference equality.
     let inline refEq (x : 'a) (y : 'a) = obj.ReferenceEquals (x, y)
 
@@ -181,12 +178,35 @@ module Operators =
     /// Sequences two functions like Haskell ($).
     let inline (^) f g = f g
 
-    /// Test for equality, usually faster than (=).
-    let inline (==) (x : 'a) (y : 'a) = fastEq x y
+/// An option type that doesn't generate garbage.
+/// TODO: document.
+type FOption<'a> =
+    struct
+        val private Exists : bool
+        val private ValueOpt : 'a
+        private new (_ : unit) = { Exists = false; ValueOpt = Unchecked.defaultof<'a> }
+        private new (_ : unit, value : 'a) = { Exists = true; ValueOpt = value }
+        static member Some (value : 'a) = new FOption<'a> ((), value)
+        static member None () = new FOption<'a> (())
+        static member FromOpt (opt : 'a option) = match opt with Option.Some value -> FOption.Some value | None -> FOption.None ()
+        static member ToOpt (fopt : FOption<'a>) = if fopt.Exists then Some fopt.ValueOpt else None
+        member this.IsSome = this.Exists
+        member this.IsNone = not this.Exists
+        member this.Value = if this.Exists then this.ValueOpt else failwith "FOption has no value to get."
+        member this.Map (fn : 'a -> 'b) = if this.Exists then new FOption<'b> ((), fn this.ValueOpt) else new FOption<'b> (())
+        end
 
-    /// Test just the value parts of a type for equality. Reflective and slow.
-    let inline (===) (x : 'a) (y : 'a) = similar x y
+[<RequireQualifiedAccess>]
+module FOption =
 
+    let fromOpt opt = FOption.FromOpt opt
+    let toOpt fopt = FOption.ToOpt fopt
+    let some value = FOption.Some value
+    let none () = FOption.None ()
+    let isSome (fopt : FOption<'a>) = fopt.IsSome
+    let isNone (fopt : FOption<'a>) = fopt.IsNone
+    let get (fopt : FOption<'a>) = fopt.Value
+    let map fn (fopt : FOption<'a>) = fopt.Map fn
 
 [<AutoOpen>]
 module HMapModule =
@@ -194,7 +214,8 @@ module HMapModule =
     /// A hash-key-value triple, implemented with a struct for efficiency.
     type private Hkv<'k, 'v when 'k :> IEquatable<'k>> =
         struct
-            new (h, k, v) = { H = h; K = k; V = v }
+            new (b, h, k, v) = { B = b; H = h; K = k; V = v }
+            val B : bool
             val H : int
             val K : 'k
             val V : 'v
@@ -208,7 +229,7 @@ module HMapModule =
         | Nil
         | Singleton of Hkv<'k, 'v>
         | Multiple of HNode<'k, 'v> array
-        | Bucket of Hkv<'k, 'v> array
+        | Gutter of Hkv<'k, 'v> array
 
     [<RequireQualifiedAccess>]
     module private HNode =
@@ -218,61 +239,48 @@ module HMapModule =
 
         /// OPTIMIZATION: Array.Clone () is not used since it's been profiled to be slower
         let inline private cloneArray (arr : HNode<'k, 'v> array) =
-            let arr' = Array.zeroCreate 32 : HNode<'k, 'v> array    // NOTE: there's an unecessary check against the size here, but that's the only inefficiency
+            let arr' = Array.zeroCreate 16 : HNode<'k, 'v> array    // NOTE: there's an unecessary check against the size here, but that's the only inefficiency
                                                                     // TODO: P1: use Array.zeroCreateUnchecked if / when it becomes available
-            Array.Copy (arr, 0, arr', 0, 32) // param checks are inefficient, but hopefully there's at least a memcpy underneath...
+            Array.Copy (arr, 0, arr', 0, 16) // param checks are inefficient, but hopefully there's at least a memcpy underneath...
             arr'
     
         let inline private hashToIndex h dep =
-            (h >>> (dep * 5)) &&& 0x1F
+            (h >>> (dep * 4)) &&& 0xF
 
-        let private addToBucket (entry : Hkv<'k, 'v>) (bucket : Hkv<'k, 'v> array) =
-            let bucketLength = bucket.Length
-            let bucket2 = Array.zeroCreate (bucketLength + 1) : Hkv<'k, 'v> array
-            Array.Copy (bucket, 0, bucket2, 0, bucketLength)
-            bucket2.[bucketLength] <- entry
-            bucket2
+        let private addToGutter (entry : Hkv<'k, 'v>) (gutter : Hkv<'k, 'v> array) =
+            let gutterLength = gutter.Length
+            let gutter2 = Array.zeroCreate 16 : Hkv<'k, 'v> array
+            Array.Copy (gutter, 0, gutter2, 0, gutterLength)
+            gutter2.[gutterLength] <- entry
+            gutter2
 
-        let private removeFromBucket (k : 'k) (bucket : Hkv<'k, 'v> array) =
-            match Array.tryFindIndexBack (fun (entry2 : Hkv<'k, 'v>) -> entry2.K.Equals k) bucket with
-            | Some index ->
-                let bucket2 = Array.zeroCreate (bucket.Length - 1) : Hkv<'k, 'v> array
-                Array.Copy (bucket, 0, bucket2, 0, index)
-                Array.Copy (bucket, index + 1, bucket2, index, bucket2.Length - index)
-                bucket2
-            | None -> bucket
+        let private removeFromGutter (k : 'k) (gutter : Hkv<'k, 'v> array) =
+            match Array.FindLastIndex (gutter, fun (entry2 : Hkv<'k, 'v>) -> entry2.B && entry2.K.Equals k) with
+            | -1 -> gutter
+            | index ->
+                let gutter2 = Array.zeroCreate (gutter.Length - 1) : Hkv<'k, 'v> array
+                Array.Copy (gutter, 0, gutter2, 0, index)
+                Array.Copy (gutter, index + 1, gutter2, index, gutter2.Length - index)
+                gutter2
 
-        let private tryFindInBucket (k : 'k) (bucket : Hkv<'k, 'v> array) =
-            match Array.tryFindBack (fun (entry2 : Hkv<'k, 'v>) -> entry2.K.Equals k) bucket with
-            | Some hkv -> Some hkv.V
-            | None -> None
+        let private tryFindInGutter (k : 'k) (gutter : Hkv<'k, 'v> array) =
+            match Array.FindLastIndex (gutter, fun (entry2 : Hkv<'k, 'v>) -> entry2.B && entry2.K.Equals k) with
+            | -1 -> FOption.none ()
+            | index -> FOption.some gutter.[index].V
+
+        let empty =
+            Nil
 
         let isEmpty node =
             match node with
             | Nil -> true
             | _ -> false
     
-        let rec fold folder state node =
-            match node with
-            | Nil -> state
-            | Singleton hkv -> folder state hkv.K hkv.V
-            | Multiple arr -> Array.fold (fold folder) state arr
-            | Bucket bucket -> Array.fold (fun state (hkv : Hkv<_, _>) -> folder state hkv.K hkv.V) state bucket
-    
-        /// NOTE: This function seems to profile as being very slow. I don't know if it's the seq / yields syntax or what.
-        let rec toSeq node =
-            seq {
-                match node with
-                | Nil -> yield! Seq.empty
-                | Singleton hkv -> yield (hkv.K, hkv.V)
-                | Multiple arr -> for n in arr do yield! toSeq n
-                | Bucket bucket -> yield! Array.map (fun (hkv : Hkv<_, _>) -> (hkv.K, hkv.V)) bucket }
-    
         /// OPTIMIZATION: Requires an empty array to use the source of new array clones in order to avoid Array.create.
         let rec add (hkv : Hkv<'k, 'v>) (earr : HNode<'k, 'v> array) (dep : int) (node : HNode<'k, 'v>) : HNode<'k, 'v> =
     
             // lower than max depth, non-clashing
-            if dep < 8 then
+            if dep < 9 then
     
                 // handle non-clash cases
                 match node with
@@ -314,7 +322,7 @@ module HMapModule =
                     arr.[idx] <- add hkv earr (dep + 1) entry
                     Multiple arr
     
-                | Bucket _ ->
+                | Gutter _ ->
     
                     // logically should never hit here
                     failwithumf ()
@@ -324,10 +332,10 @@ module HMapModule =
                 
                 // handle clash cases
                 match node with
-                | Nil -> Bucket (Array.singleton hkv)
-                | Singleton hkv' -> Bucket [|hkv'; hkv|]
+                | Nil -> Gutter (Array.singleton hkv)
+                | Singleton hkv' -> Gutter [|hkv'; hkv|]
                 | Multiple _ -> failwithumf () // should never hit here
-                | Bucket bucket -> Bucket (addToBucket hkv bucket)
+                | Gutter gutter -> Gutter (addToGutter hkv gutter)
     
         let rec remove (h : int) (k : 'k) (dep : int) (node : HNode<'k, 'v>) : HNode<'k, 'v> =
             match node with
@@ -339,26 +347,39 @@ module HMapModule =
                 let arr = cloneArray arr
                 arr.[idx] <- remove h k (dep + 1) entry
                 if Array.forall isEmpty arr then Nil else Multiple arr // does not collapse Multiple to Singleton, tho could?
-            | Bucket bucket ->
-                let bucket = removeFromBucket k bucket
-                if Array.isEmpty bucket then Nil else Bucket bucket
+            | Gutter gutter ->
+                let gutter = removeFromGutter k gutter
+                if Array.isEmpty gutter then Nil else Gutter gutter
     
-        let rec tryFind (h : int) (k : 'k) (dep : int) (node : HNode<'k, 'v>) : 'v option =
+        let rec tryFindFast (h : int) (k : 'k) (dep : int) (node : HNode<'k, 'v>) : 'v FOption =
             match node with
-            | Nil -> None
-            | Singleton hkv -> if hkv.K.Equals k then Some hkv.V else None
-            | Multiple arr -> let idx = hashToIndex h dep in tryFind h k (dep + 1) arr.[idx]
-            | Bucket bucket -> tryFindInBucket k bucket
+            | Nil -> FOption.none ()
+            | Singleton hkv -> if hkv.K.Equals k then FOption.some hkv.V else FOption.none ()
+            | Multiple arr -> let idx = hashToIndex h dep in tryFindFast h k (dep + 1) arr.[idx]
+            | Gutter gutter -> tryFindInGutter k gutter
     
         let rec find (h : int) (k : 'k) (dep : int) (node : HNode<'k, 'v>) : 'v =
             match node with
             | Nil -> failwithKeyNotFound k
             | Singleton hkv -> if hkv.K.Equals k then hkv.V else failwithKeyNotFound k
             | Multiple arr -> let idx = hashToIndex h dep in find h k (dep + 1) arr.[idx]
-            | Bucket bucket -> Option.get (tryFindInBucket k bucket)
+            | Gutter gutter -> FOption.get (tryFindInGutter k gutter)
     
-        let empty =
-            Nil
+        let rec fold folder state node =
+            match node with
+            | Nil -> state
+            | Singleton hkv -> folder state hkv.K hkv.V
+            | Multiple arr -> Array.fold (fold folder) state arr
+            | Gutter gutter -> Array.fold (fun state (hkv : Hkv<_, _>) -> folder state hkv.K hkv.V) state gutter
+    
+        /// NOTE: This function seems to profile as being very slow. I don't know if it's the seq / yields syntax or what.
+        let rec toSeq node =
+            seq {
+                match node with
+                | Nil -> yield! Seq.empty
+                | Singleton hkv -> yield (hkv.K, hkv.V)
+                | Multiple arr -> for n in arr do yield! toSeq n
+                | Gutter gutter -> yield! Array.map (fun (hkv : Hkv<_, _>) -> (hkv.K, hkv.V)) gutter }
 
     /// A fast persistent hash map.
     /// Works in effectively constant-time for look-ups and updates.
@@ -379,82 +400,87 @@ module HMapModule =
         /// Create an empty HMap.
         let makeEmpty () =
             { Node = HNode.empty
-              EmptyArray = Array.create 32 HNode.empty }
-    
-        /// Check that a HMap is empty.
+              EmptyArray = Array.create 16 HNode.empty }
+
+        /// Check that an HMap is empty.
         let isEmpty map =
             HNode.isEmpty map.Node
     
-        /// Check that a HMap is empty.
+        /// Check that an HMap is empty.
         let notEmpty map =
             not ^ HNode.isEmpty map.Node
     
-        /// Add a value with the key to a HMap.
+        /// Add a value with the key to an HMap.
         let add (key : 'k) (value : 'v) map =
-            let hkv = Hkv (key.GetHashCode (), key, value)
+            let hkv = Hkv (true, key.GetHashCode (), key, value)
             let node = HNode.add hkv map.EmptyArray 0 map.Node
             { map with Node = node }
     
-        /// Remove a value with the given key from a HMap.
+        /// Remove a value with the given key from an HMap.
         let remove (key : 'k) map =
             let h = key.GetHashCode ()
             { map with Node = HNode.remove h key 0 map.Node }
     
-        /// Add all the given entries to a HMap.
+        /// Add all the given entries to an HMap.
         let addMany entries map =
             Seq.fold (fun map (key : 'k, value : 'v) -> add key value map) map entries
     
-        /// Remove all values with the given keys from a HMap.
+        /// Remove all values with the given keys from an HMap.
         let removeMany keys map =
             Seq.fold (fun map (key : 'k) -> remove key map) map keys
     
-        /// Try to find a value with the given key in a HMap.
+        /// Try to find a value with the given key in an HMap.
+        /// Constant-time complexity with approx. 1/3 speed of Dictionary.TryGetValue.
+        let tryFindFast (key : 'k) map : 'v FOption =
+            let h = key.GetHashCode ()
+            HNode.tryFindFast h key 0 map.Node
+
+        /// Try to find a value with the given key in an HMap.
         /// Constant-time complexity with approx. 1/3 speed of Dictionary.TryGetValue.
         let tryFind (key : 'k) map : 'v option =
-            let h = key.GetHashCode ()
-            HNode.tryFind h key 0 map.Node
-            
-        /// Find a value with the given key in a HMap.
+            let fopt = tryFindFast key map
+            FOption.toOpt fopt
+
+        /// Find a value with the given key in an HMap.
         /// Constant-time complexity with approx. 1/3 speed of Dictionary.GetValue.
         let find (key : 'k) map : 'v =
             let h = key.GetHashCode ()
             HNode.find h key 0 map.Node
     
-        /// Check that a HMap contains a value with the given key.
+        /// Check that an HMap contains a value with the given key.
         let containsKey key map =
-            match tryFind key map with
-            | Some _ -> true
-            | None -> false
+            let opt = tryFindFast key map
+            FOption.isSome opt
             
         /// Combine the contents of two HMaps, taking an item from the second map in the case of a key conflict.
         let concat map map2 =
             Seq.fold (flip ^ uncurry add) map map2
     
-        /// Fold over a HMap.
+        /// Fold over an HMap.
         let fold folder state (map : HMap<'k, 'v>) =
             HNode.fold folder state map.Node
     
-        /// Map over a HMap.
+        /// Map over an HMap.
         let map mapper (map : HMap<'k, 'v>) =
             fold
                 (fun state key value -> add key (mapper value) state)
                 (makeEmpty ())
                 map
     
-        /// Filter a HMap.
+        /// Filter an HMap.
         let filter pred (map : HMap<'k, 'v>) =
             fold
                 (fun state key value -> if pred key value then add key value state else state)
                 (makeEmpty ())
                 map
     
-        /// Convert a HMap to a sequence of pairs of keys and values.
+        /// Convert an HMap to a sequence of pairs of keys and values.
         /// NOTE: This function seems to profile as being very slow. I don't know if it's the seq / yields syntax or what.
         /// Don't use it unless you need its laziness or if performance won't be affected significantly.
         let toSeq (map : HMap<'k, 'v>) =
             map :> IEnumerable<'k * 'v>
     
-        /// Convert a sequence of keys and values to a HMap.
+        /// Convert a sequence of keys and values to an HMap.
         let ofSeq pairs =
             Seq.fold
                 (fun map (key, value) -> add key value map)
