@@ -83,7 +83,7 @@ open System.Collections.Generic
 
 open FSharp.Core.OptimizedClosures
 
-type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() as self =
+type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>>() =
   static let emptyNode = EmptyNode<'K, 'V> () :> PersistentHashMap<'K, 'V>
 
   static let rec arrayMapValuesLoop m (vs : PersistentHashMap<'K, 'V> []) (nvs : PersistentHashMap<'K, 'U> []) i =
@@ -103,11 +103,11 @@ type [<AbstractClass>] PersistentHashMap<'K, 'V when 'K :> System.IEquatable<'K>
       nvs.[i] <- vs.[i].DoMapValues m :?> KeyValueNode<'K, 'U>
       arrayMapKeyValuesLoop m vs nvs (i + 1)
 
-  let createEnumerator () = new PersistentHashMapEnumerator<_, _> (self)
+  let createEnumerator x = new PersistentHashMapEnumerator<_, _> (x)
 
   interface IEnumerable<KeyValuePair<'K,'V>> with
-    override x.GetEnumerator () = createEnumerator () :> IEnumerator<KeyValuePair<'K, 'V>>
-    override x.GetEnumerator () = createEnumerator () :> System.Collections.IEnumerator
+    override x.GetEnumerator () = createEnumerator x :> IEnumerator<KeyValuePair<'K, 'V>>
+    override x.GetEnumerator () = createEnumerator x :> System.Collections.IEnumerator
 
 #if PHM_TEST_BUILD
   abstract DoCheckInvariant : uint32 -> int -> int -> bool

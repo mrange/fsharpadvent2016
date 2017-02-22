@@ -505,6 +505,7 @@
 
     let testCases =
       [|
+        "Persistent Hash Map (C#)"      , CsPersistentHashMap.createTestCases
         "Persistent Hash Map (F#)"      , FsPersistentHashMap.createTestCases
         "FSharpx.Collections"           , FSharpx.createTestCases
         "Prime.HMap"                    , PrimeVmap.createTestCases
