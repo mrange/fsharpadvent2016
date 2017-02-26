@@ -14,6 +14,9 @@
 2. **2016-12-11**
   1. **New performance test** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms).
   1. **New performance test** - Added performance tests that varies the data size
+3. **2017-02-26**
+  1. **Updated performance numbers** - Bryan Edds ([@bryanedds](https://github.com/bryanedds)) has been tweaking on `Prime.Hmap`
+  1. **Moved images into repo** - Instead of using imgur which is getting out of hand I put the images in the repo.
 
 ## Background
 
@@ -964,8 +967,8 @@ Note that we update a value type field or an value type array element there will
 
 So for the future it can be good to keep in mind that while updating reference fields this will also insert an "invisible" call to `JIT_WriteBarrier` which may or may not have significant performance impact.
 
-  [1]: http://i.imgur.com/527IMkO.png
-  [2]: http://i.imgur.com/aFf1PgF.png
-  [3]: http://i.imgur.com/S87V5jG.png
-  [4]: http://i.imgur.com/uRD0Z5C.png
-  [5]: http://i.imgur.com/o2Av1pF.png
+  [1]:  https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_tm.png
+  [2]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_cc.png
+  [3]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_lookup.png
+  [4]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_insert.png
+  [5]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_remove.png
