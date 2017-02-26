@@ -731,7 +731,7 @@ module PerformanceTests =
       let result    = doLookup lookups inserted
       Checker.check (fun () -> result) "Expected true for all"
 
-  module PrimeVmap =
+  module PrimeHmap =
     open Prime
 
     let inline doInsert phm =
@@ -1060,9 +1060,9 @@ module PerformanceTests =
       "Lookup"  , "FSharpx.Collections"           , FSharpx.lookupInserted
       "Insert"  , "FSharpx.Collections"           , FSharpx.insert
       "Remove"  , "FSharpx.Collections"           , FSharpx.remove
-      "Lookup"  , "Prime.Vmap"                    , PrimeVmap.lookupInserted
-      "Insert"  , "Prime.Vmap"                    , PrimeVmap.insert
-      "Remove"  , "Prime.Vmap"                    , PrimeVmap.remove
+      "Lookup"  , "Prime.Hmap"                    , PrimeHmap.lookupInserted
+      "Insert"  , "Prime.Hmap"                    , PrimeHmap.insert
+      "Remove"  , "Prime.Hmap"                    , PrimeHmap.remove
       "Lookup"  , "Imms.ImmMap"                   , ImmsMap.lookupInserted
       "Insert"  , "Imms.ImmMap"                   , ImmsMap.insert
       "Remove"  , "Imms.ImmMap"                   , ImmsMap.remove
