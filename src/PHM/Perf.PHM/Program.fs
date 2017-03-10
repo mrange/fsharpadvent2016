@@ -571,7 +571,6 @@
         "Prime.HMap"                    , PrimeVmap.createTestCases
         "Imms.ImmMap"                   , ImmsImmMap.createTestCases
         "ImTools.ImHashMap (C#)"        , CsImHashMap.createTestCases
-        "ImTools.ImHashMapForest (C#)"  , CsImHashMap.createTestCases
         "System.Collections.Immutable"  , SCI.createTestCases
         "Map (F#)"                      , FsMap.createTestCases
       |]
