@@ -970,8 +970,8 @@ Note that we update a value type field or an value type array element there will
 
 So for the future it can be good to keep in mind that while updating reference fields this will also insert an "invisible" call to `JIT_WriteBarrier` which may or may not have significant performance impact.
 
-  [1]:  https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_tm.png
-  [2]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_cc.png
-  [3]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_lookup.png
-  [4]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_insert.png
-  [5]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/4852f88f20dba25edf6f1bdc1ee1df5caee9f379/src/PHM/images/phm_remove.png
+  [1]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/a9bc95ecc1182a121448f702191065a431c7fda8/src/PHM/images/phm_tm.png
+  [2]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/a9bc95ecc1182a121448f702191065a431c7fda8/src/PHM/images/phm_cc.png
+  [3]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/a9bc95ecc1182a121448f702191065a431c7fda8/src/PHM/images/phm_lookup.png
+  [4]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/a9bc95ecc1182a121448f702191065a431c7fda8/src/PHM/images/phm_insert.png
+  [5]: https://raw.githubusercontent.com/mrange/fsharpadvent2016/a9bc95ecc1182a121448f702191065a431c7fda8/src/PHM/images/phm_remove.png
