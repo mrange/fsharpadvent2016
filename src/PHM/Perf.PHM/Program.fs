@@ -430,6 +430,66 @@
 
       lookup, insert, remove
 
+  module CsImHashMap =
+    open ImTools
+    open System.Linq
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   (hm : ImHashMap<_, _>) = 
+        let r, _ = hm.TryFind k
+        r
+      let inline isEmpty          (hm : ImHashMap<_, _>) = hm.IsEmpty
+      let length (hm : ImHashMap<_, _>) = hm.Enumerate().Count()
+
+      let inline set          k v (hm : ImHashMap<_, _>) = hm.AddOrUpdate (k, v)
+      let inline unset        k   (hm : ImHashMap<_, _>) = hm.Remove k
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = ImHashMap<_, _>.Empty
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
+
   module SCI =
     open System.Collections.Immutable
 
@@ -510,6 +570,7 @@
         "FSharpx.Collections"           , FSharpx.createTestCases
         "Prime.HMap"                    , PrimeVmap.createTestCases
         "Imms.ImmMap"                   , ImmsImmMap.createTestCases
+        "ImTools.ImHashMap (C#)"        , CsImHashMap.createTestCases
         "System.Collections.Immutable"  , SCI.createTestCases
         "Map (F#)"                      , FsMap.createTestCases
       |]
