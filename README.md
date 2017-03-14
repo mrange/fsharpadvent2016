@@ -17,6 +17,8 @@
 3. **2017-02-26**
   1. **Updated performance numbers** - Bryan Edds ([@bryanedds](https://github.com/bryanedds)) has been tweaking on `Prime.Hmap`
   1. **Moved images into repo** - Instead of using imgur which is getting out of hand I put the images in the repo.
+3. **2017-03-14**
+  1. **New performance test** - Maksim Volkau ([@dadhi](https://github.com/dadhi)) submitted a new test case for [ImTools](https://github.com/dadhi/ImTools).
 
 ## Background
 
@@ -365,13 +367,14 @@ In addition, it's interesting to see the **Lookup**, **Insert** and **Remove** p
 
 For these tests I focused on the following algorithms:
 
-2. **Persistent Hash Map (C#)** - "My" Map written in C#
-3. **Persistent Hash Map (F#)** - "My" Map written in F#
-5. **FSharpx.Collections.PersistentHashMap**
-6. **Prime.Vmap** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
-7. **Imms.ImmMap** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms)
-8. **System.Collections.Immutable.ImmutableDictionary**
-9. **FSharp.Collections.Map**
+1. **Persistent Hash Map (C#)** - "My" Map written in C#
+1. **Persistent Hash Map (F#)** - "My" Map written in F#
+1. **FSharpx.Collections.PersistentHashMap**
+1. **Prime.Vmap** - Anthony Lloyd ([@AnthonyLloyd](https://gist.github.com/AnthonyLloyd)) suggested that I compare against [Prime.Vmap](https://github.com/bryanedds/Nu/blob/master/Prime/Prime/Vmap.fs)
+1. **Imms.ImmMap** - Henrik Feldt ([@haf](https://github.com/haf)) suggested that I compare against [Imms.ImmMap](https://github.com/Imms/Imms)
+1. **ImTools.ImHashMap (C#)** - Maksim Volkau ([@dadhi](https://github.com/dadhi)) submitted a new test case for [ImTools](https://github.com/dadhi/ImTools)
+1. **System.Collections.Immutable.ImmutableDictionary**
+1. **FSharp.Collections.Map**
 
 The data size varies over 10, 100, 1,000, 10,000 and 100,000 elements but the total work is kept constant to make times comparable.
 
