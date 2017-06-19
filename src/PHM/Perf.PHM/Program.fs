@@ -490,6 +490,132 @@
       lookup, insert, remove
 
 
+  module CsHashMap =
+    open ImTools
+    open System.Linq
+    open System.Collections.Generic
+
+    type KeyComparer =
+        struct
+           interface IEqualityComparer<Key> with
+                member x.Equals(one: Key, another: Key) = one.Value = another.Value
+                member x.GetHashCode(one: Key) = one.Value
+        end
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   (hm : HashMap<_, _, _>) = 
+        let r, _ = hm.TryFind k
+        r
+      let inline isEmpty          (hm : HashMap<_, _, _>) = hm.Count = 0
+      let length                  (hm : HashMap<_, _, _>) = hm.Count
+      let inline set          k v (hm : HashMap<_, _, _>) = hm.AddOrUpdate (k, v); hm
+      let inline unset        k   (hm : HashMap<_, _, _>) = hm.Remove k |> ignore; hm
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = new HashMap<_, _, KeyComparer> ()
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
+  module CsConcurrentDictionary =
+    open System.Linq
+    open System.Collections.Concurrent
+
+    let createTestCases lookups inserts removals = 
+      let inline containsKey  k   (d : ConcurrentDictionary<_, _>) = d.ContainsKey k
+      let inline isEmpty          (d : ConcurrentDictionary<_, _>) = d.Count = 0
+      let length                  (d : ConcurrentDictionary<_, _>) = d.Count
+      let inline set          k v (d : ConcurrentDictionary<_, _>) = 
+        d.TryAdd (k, v) |> ignore
+        d 
+      let inline unset        k   (d : ConcurrentDictionary<_, _>) = 
+        let _, _ = d.TryRemove k
+        d
+
+      let inline doInsert phm =
+        let rec loop phm i =
+          if i < Array.length inserts then
+            let k, v = inserts.[i]
+            loop (set k v phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doRemove phm =
+        let rec loop phm i =
+          if i < Array.length removals then
+            let k, _ = removals.[i]
+            loop (unset k phm) (i + 1)
+          else
+            phm
+        loop phm 0
+
+      let inline doLookup phm =
+        let rec loop i =
+          if i < Array.length lookups then
+            let k, _ = lookups.[i]
+            containsKey k phm && loop (i + 1)
+          else
+            true
+        loop 0
+
+      let empty     = new ConcurrentDictionary<_, _> ()
+
+      let inserted  = doInsert empty
+
+      let insert () =
+        let result    = doInsert empty
+        Checker.check (fun () -> length result = length inserted) "Expected to be same length as testSet"
+
+      let remove () =
+        let result    = doRemove inserted
+        Checker.check (fun () -> isEmpty result) "Expected to be empty"
+
+      let lookup () =
+        let result    = doLookup inserted
+        Checker.check (fun () -> result) "Expected true for all"
+
+      lookup, insert, remove
+
   module SCI =
     open System.Collections.Immutable
 
@@ -571,6 +697,8 @@
         "Prime.HMap"                    , PrimeVmap.createTestCases
         "Imms.ImmMap"                   , ImmsImmMap.createTestCases
         "ImTools.ImHashMap (C#)"        , CsImHashMap.createTestCases
+        "ImTools.HashMap (C#)"          , CsHashMap.createTestCases
+        "ConcurrentDictionary (C#)"     , CsConcurrentDictionary.createTestCases
         "System.Collections.Immutable"  , SCI.createTestCases
         "Map (F#)"                      , FsMap.createTestCases
       |]
